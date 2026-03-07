@@ -5,6 +5,7 @@ import Library from './pages/Library';
 import Song from './pages/Song';
 import Login from './pages/admin/Login';
 import Dashboard from './pages/admin/Dashboard';
+import PrivateRoute from './components/PrivateRoute';
 
 function App() {
   return (
@@ -16,7 +17,14 @@ function App() {
 
         {/* Rotas de Administração */}
         <Route path="/admin/login" element={<Login />} />
-        <Route path="/admin/dashboard" element={<Dashboard />} />
+        <Route 
+          path="/admin/dashboard"
+          element={
+            <PrivateRoute>
+              <Dashboard />
+            </PrivateRoute>
+          }
+        />
 
       </Routes>
     </Router>

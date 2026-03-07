@@ -3,19 +3,19 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: Adicione as credenciais do seu projeto Firebase aqui
+// A configuração do seu projeto Firebase
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_AUTH_DOMAIN",
-  projectId: "SEU_PROJECT_ID",
-  storageBucket: "SEU_STORAGE_BUCKET",
-  messagingSenderId: "SEU_MESSAGING_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyA8idPjUMLgXIa_jEccTBoNgMCaqyeD9os",
+  authDomain: "autoscrollcifras.firebaseapp.com",
+  projectId: "autoscrollcifras",
+  storageBucket: "autoscrollcifras.firebasestorage.app",
+  messagingSenderId: "687618882909",
+  appId: "1:687618882909:web:9ab80e74bd72107a613cb4"
 };
 
 // Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exporta os serviços que vamos usar
+// Exporta os serviços que vamos usar no restante da aplicação
 export const auth = getAuth(app);
 export const db = getFirestore(app);
