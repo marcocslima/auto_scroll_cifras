@@ -1,23 +1,35 @@
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { FaceMesh } from '@mediapipe/face_mesh';
 import { Camera } from '@mediapipe/camera_utils';
 
 const useFaceScroll = (videoRef, sensitivity) => {
   const scrollableRef = useRef(null);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
-  // Novos estados para a lógica de auto-start/stop
   const [isTrackingActive, setIsTrackingActive] = useState(false);
   const [trackingStatus, setTrackingStatus] = useState('Aguardando câmera...');
 
+  const [isScrollEnabled, setIsScrollEnabled] = useState(true); 
+
+  const toggleScrollEnabled = useCallback(() => {
+    setIsScrollEnabled(prev => !prev);
+  }, []);
+
   useEffect(() => {
     if (!isCameraEnabled || !videoRef.current) {
-      setIsTrackingActive(false);
       setTrackingStatus('Aguardando câmera...');
       return;
     }
 
-    setTrackingStatus('Posicione o rosto no centro');
+    // Se a rolagem estiver desativada, desliga a câmera e o rastreamento.
+    // A função de limpeza do useEffect anterior já terá chamado camera.stop().
+    if (!isScrollEnabled) {
+      setTrackingStatus('Rolagem desativada');
+      setIsTrackingActive(false);
+      return; // Impede a reinicialização da câmera
+    }
+
+    setTrackingStatus('Iniciando câmera...');
 
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -43,52 +55,40 @@ const useFaceScroll = (videoRef, sensitivity) => {
       const faceDetected = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
 
       if (!faceDetected) {
-        if (isTrackingActive) {
-          setIsTrackingActive(false);
-        }
         setTrackingStatus('Rosto não detectado');
+        setIsTrackingActive(false);
         return;
       }
+      
+      setTrackingStatus('Rolagem Ativa');
+      setIsTrackingActive(true);
 
       const nose = results.multiFaceLandmarks[0][1];
       if (!nose || !scrollableRef.current) return;
 
       const y = nose.y;
-      const activationZone = { top: 0.4, bottom: 0.6 };
+      const deadzone = 0.05;
+      const scrollSpeed = sensitivity;
 
-      if (isTrackingActive) {
-        setTrackingStatus('Rolagem Ativa');
-        const deadzone = 0.05;
-        const smoothFactor = 0.5;
-        const scrollSpeed = sensitivity;
-
-        if (y > 0.5 + deadzone) {
-          const scrollAmount = (y - (0.5 + deadzone)) * scrollSpeed;
-          scrollableRef.current.scrollTop += scrollAmount * smoothFactor;
-        } else if (y < 0.5 - deadzone) {
-          const scrollAmount = ((0.5 - deadzone) - y) * scrollSpeed;
-          const returnScrollMultiplier = 1.5;
-          scrollableRef.current.scrollTop -= scrollAmount * smoothFactor * returnScrollMultiplier;
-        }
-      } else {
-        if (y > activationZone.top && y < activationZone.bottom) {
-          setIsTrackingActive(true);
-          setTrackingStatus('Rolagem Ativada!');
-        } else {
-          setTrackingStatus('Centralize o rosto para ativar');
-        }
+      if (y > 0.5 + deadzone) {
+        const scrollAmount = (y - (0.5 + deadzone)) * scrollSpeed;
+        scrollableRef.current.scrollTop += scrollAmount;
+      } else if (y < 0.5 - deadzone) {
+        const scrollAmount = ((0.5 - deadzone) - y) * scrollSpeed;
+        scrollableRef.current.scrollTop -= scrollAmount;
       }
     };
 
     faceMesh.onResults(onResults);
 
+    // Função de limpeza: será chamada quando o componente desmontar ou quando isScrollEnabled mudar
     return () => {
       camera.stop();
       faceMesh.close();
     };
-  }, [isCameraEnabled, videoRef, sensitivity, isTrackingActive]);
+  }, [isCameraEnabled, videoRef, sensitivity, isScrollEnabled]);
 
-  return { scrollableRef, setIsCameraEnabled, isTrackingActive, trackingStatus };
+  return { scrollableRef, setIsCameraEnabled, isTrackingActive, trackingStatus, isScrollEnabled, toggleScrollEnabled };
 };
 
 export default useFaceScroll;

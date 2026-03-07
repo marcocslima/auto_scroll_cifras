@@ -10,8 +10,17 @@ const Song = () => {
 
   const videoRef = useRef(null);
   const [sensitivity, setSensitivity] = useState(100);
-  // Pegando os novos estados do hook
-  const { scrollableRef, setIsCameraEnabled, isTrackingActive, trackingStatus } = useFaceScroll(videoRef, sensitivity);
+  const [isCameraViewEnabled, setIsCameraViewEnabled] = useState(false);
+
+  // Importando os novos controles do hook
+  const { 
+    scrollableRef, 
+    setIsCameraEnabled, 
+    isTrackingActive, 
+    trackingStatus, 
+    isScrollEnabled, 
+    toggleScrollEnabled 
+  } = useFaceScroll(videoRef, sensitivity);
 
   useEffect(() => {
     const requestCamera = async () => {
@@ -57,19 +66,46 @@ const Song = () => {
         </div>
       </div>
       
-      {/* Feedback Visual da Câmera e Status */}
-      <div className='absolute top-4 right-4 w-40 z-50'>
+      {/* Controles da Câmera, Rolagem e Status */}
+      <div className='absolute top-4 right-4 w-48 z-50'> {/* Aumentado o width para caber os botões */}
+        <div className="flex flex-col items-stretch text-center gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              {/* Botão para alternar a rolagem */}
+              <button
+                onClick={toggleScrollEnabled}
+                className='bg-blue-600/80 text-white px-3 py-1.5 rounded-lg hover:bg-blue-500 transition-colors text-sm'
+              >
+                {isScrollEnabled ? 'Pausar Rolagem' : 'Ativar Rolagem'}
+              </button>
+
+              {/* Botão para alternar a visibilidade da câmera */}
+              <button
+                onClick={() => setIsCameraViewEnabled(prev => !prev)}
+                className='bg-gray-800/80 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors text-sm'
+              >
+                {isCameraViewEnabled ? 'Ocultar Câm' : 'Ver Câm'}
+              </button>
+            </div>
+            
+            {/* Status do monitoramento, sempre visível */}
+            <p className='text-xs bg-gray-900/50 rounded p-1 w-full'>
+              {trackingStatus}
+            </p>
+        </div>
+        
         <video 
           ref={videoRef} 
-          className={`w-full h-auto rounded-lg border-2 ${isTrackingActive ? 'border-green-500' : 'border-red-500'}`}
-          playsInline 
+          className={
+            isCameraViewEnabled
+              ? `w-full h-auto rounded-lg border-2 mt-2 ${isTrackingActive && isScrollEnabled ? 'border-green-500' : 'border-red-500'}`
+              : 'absolute -left-full w-px h-px'
+          }
+          playsInline
+          muted
+          autoPlay
         />
-        <p className='text-center text-xs mt-1 bg-gray-900/50 rounded p-1'>
-          {trackingStatus}
-        </p>
       </div>
 
-      {/* Controles de Sensibilidade */}
       <div className='fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/80 rounded-full flex items-center gap-4 px-4 py-2 text-white z-50'>
         <button onClick={decreaseSensitivity} className='text-2xl font-bold'>-</button>
         <span className='text-lg'>Sensibilidade: {sensitivity}</span>
