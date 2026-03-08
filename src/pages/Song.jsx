@@ -5,46 +5,37 @@ import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import useFaceScroll from '../hooks/useFaceScroll';
 
-// Função auxiliar para parsear os acordes de forma segura
 const parseChords = (chordsString) => {
   try {
     const parsed = JSON.parse(chordsString);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.error("Erro ao parsear acordes:", e);
-    return []; 
+    return [];
   }
 };
 
-// ===================================================================================
-// COMPONENTE DA PÁGINA DA MÚSICA
-// ===================================================================================
 const Song = () => {
   const { id } = useParams();
   const [song, setSong] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // --- Estado da UI ---
   const [sensitivity, setSensitivityState] = useState(30);
-  const [isCameraPreviewVisible, setIsCameraPreviewVisible] = useState(true);
+  const [isCameraPreviewVisible, setIsCameraPreviewVisible] = useState(false);
   const displayVideoRef = useRef(null);
 
-  // --- API do Hook de Rolagem Facial ---
   const {
     start,
     stop,
     isActive,
-    isScrollEnabled,
-    toggleScroll,
+    isScrollEnabled, // Manter o estado, mesmo sem o botão visível por enquanto
+    toggleScroll, 
     trackingStatus,
     videoStream,
     setSensitivity
   } = useFaceScroll();
 
-  // --- Efeitos ---
-
-  // Conecta o stream de vídeo do hook ao elemento <video> da UI
   useEffect(() => {
     const videoElement = displayVideoRef.current;
     if (videoElement && videoStream) {
@@ -57,7 +48,6 @@ const Song = () => {
     };
   }, [videoStream]);
 
-  // Busca os dados da música do Firestore
   useEffect(() => {
     const fetchSong = async () => {
       setLoading(true);
@@ -83,8 +73,6 @@ const Song = () => {
     };
   }, [id, stop]);
 
-  // --- Handlers de UI ---
-
   const handleToggleFaceScroll = () => {
     if (isActive) {
       stop();
@@ -98,8 +86,6 @@ const Song = () => {
       setSensitivityState(value);
       setSensitivity(value);
   };
-
-  // --- Renderização ---
 
   if (loading) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
   if (error) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">{error}</div>;
@@ -116,76 +102,68 @@ const Song = () => {
           <p className="text-md text-gray-500 mt-1">Tom: {song.tone}</p>
         </header>
 
-        {/* PAINEL DE CONTROLE EXPANSÍVEL */}
-        <details className="bg-gray-800 border border-gray-700 rounded-lg mb-6 shadow-lg open:pb-4 transition-all">
-          <summary className="p-4 cursor-pointer font-bold text-lg list-none">
-            Configurações de Rolagem Facial
-            <span className="text-sm font-normal text-gray-400 ml-2">({isActive ? 'Ativo' : 'Inativo'})</span>
-          </summary>
+        {/* PAINEL DE CONTROLE REESTRUTURADO */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg mb-6 shadow-lg p-4 space-y-3">
+          <button 
+            onClick={handleToggleFaceScroll} 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg"
+          >
+            {isActive ? 'Parar Rolagem Facial' : 'Ativar Rolagem Facial'}
+          </button>
+
+          <p className="text-sm text-gray-400 h-5 text-center">{isActive ? trackingStatus : "Rolagem facial inativa"}</p>
           
-          <div className="px-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-            {/* Coluna 1: Vídeo e Status */}
-            <div className="md:col-span-1 space-y-2 flex flex-col items-center">
-              <video 
+          {isActive && (
+            <details className="border-t border-gray-700 pt-3">
+              <summary className="cursor-pointer list-none text-center text-blue-400 hover:text-blue-300">
+                Configurações
+              </summary>
+              
+              <div className="mt-4 space-y-4">
+                <button 
+                  onClick={() => setIsCameraPreviewVisible(prev => !prev)} 
+                  className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors"
+                >
+                  {isCameraPreviewVisible ? 'Ocultar Câmera' : 'Mostrar Câmera'}
+                </button>
+
+                <div className="pt-2">
+                  <label htmlFor="sensitivity" className="block text-xs text-gray-400 mb-1">Sensibilidade: {sensitivity}</label>
+                  <input 
+                    type="range" 
+                    id="sensitivity" 
+                    min="10" 
+                    max="100" 
+                    value={sensitivity}
+                    onChange={handleSensitivityChange}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              </div>
+            </details>
+          )}
+        </div>
+
+        {/* Container da Pré-visualização da Câmera (tamanho restaurado) */}
+        <div className={`flex justify-center mb-6 overflow-hidden transition-all duration-500 ease-in-out ${isActive && isCameraPreviewVisible ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+            <video 
                 ref={displayVideoRef}
-                className={`w-full max-w-xs h-auto rounded-md bg-gray-900 transition-all duration-300 ${isActive && isCameraPreviewVisible ? 'opacity-100' : 'h-0 opacity-0'}`}
+                className="w-full max-w-md h-auto rounded-lg bg-gray-900 shadow-lg"
                 autoPlay 
                 playsInline
                 muted
-              />
-              <p className="text-sm text-gray-400 h-5 text-center">{isActive ? trackingStatus : "Rolagem Inativa"}</p>
-            </div>
-
-            {/* Coluna 2 e 3: Botões e Controles */}
-            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button onClick={handleToggleFaceScroll} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors text-base">
-                {isActive ? 'Parar Rolagem Facial' : 'Ativar Rolagem Facial'}
-              </button>
-              
-              {isActive && (
-                <>
-                  <button onClick={() => setIsCameraPreviewVisible(prev => !prev)} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">
-                    {isCameraPreviewVisible ? 'Ocultar Câmera' : 'Mostrar Câmera'}
-                  </button>
-
-                  <button onClick={toggleScroll} className={`w-full font-bold py-2 px-4 rounded-lg text-sm transition-colors ${isScrollEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-                    {isScrollEnabled ? 'Rolagem Ativa' : 'Rolagem Pausada'}
-                  </button>
-
-                  <div className="sm:col-span-2 pt-2">
-                    <label htmlFor="sensitivity" className="block text-xs text-gray-400 mb-1">Sensibilidade: {sensitivity}</label>
-                    <input 
-                      type="range" 
-                      id="sensitivity" 
-                      min="10" 
-                      max="100" 
-                      value={sensitivity}
-                      onChange={handleSensitivityChange}
-                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </details>
+            />
+        </div>
 
         {/* CONTEÚDO DA MÚSICA */}
         <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-loose font-mono overflow-x-auto">
           {song.chords.length > 0 ? (
             song.chords.map((line, lineIndex) => (
-              // Usamos flex-wrap para que os segmentos quebrem para a próxima linha em telas pequenas
               <div key={lineIndex} className="flex flex-wrap items-end mb-4">
                 {line.map((segment, segmentIndex) => (
-                  // Adicionamos uma margem inferior para espaçamento quando quebrar a linha
                   <div key={segmentIndex} className="mr-4 mb-2">
-                    <span className="block h-6 font-bold text-blue-400">
-                      {segment.chord || ' ' /* Espaço sem quebra */}
-                    </span>
-                    {/* whitespace-pre-wrap permite que o texto quebre, preservando os espaços */}
-                    <span className="whitespace-pre-wrap">
-                      {segment.lyric}
-                    </span>
+                    <span className="block h-6 font-bold text-blue-400">{segment.chord || ' '}</span>
+                    <span className="whitespace-pre-wrap">{segment.lyric}</span>
                   </div>
                 ))}
               </div>
