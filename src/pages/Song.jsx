@@ -1,115 +1,130 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { db } from '../firebase/config';
+import { doc, getDoc } from 'firebase/firestore';
 import useFaceScroll from '../hooks/useFaceScroll';
-import { songs } from '../data/songs';
+
+const parseChords = (chordsString) => {
+  try {
+    return JSON.parse(chordsString);
+  } catch (e) {
+    console.error("Erro ao parsear a cifra:", e);
+    return [];
+  }
+};
 
 const Song = () => {
   const { id } = useParams();
-  const song = songs.find(s => s.id === parseInt(id));
+  const [song, setSong] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  const [sensitivity, setSensitivity] = useState(30);
 
   const videoRef = useRef(null);
-  const [sensitivity, setSensitivity] = useState(100);
-  const [isCameraViewEnabled, setIsCameraViewEnabled] = useState(false);
-
-  // Importando os novos controles do hook
-  const { 
-    scrollableRef, 
-    setIsCameraEnabled, 
-    isTrackingActive, 
-    trackingStatus, 
-    isScrollEnabled, 
-    toggleScrollEnabled 
+  const {
+    scrollableRef,
+    isCameraEnabled,
+    setIsCameraEnabled,
+    trackingStatus,
+    isScrollEnabled,
+    toggleScrollEnabled,
   } = useFaceScroll(videoRef, sensitivity);
 
   useEffect(() => {
-    const requestCamera = async () => {
+    const fetchSong = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        await navigator.mediaDevices.getUserMedia({ video: true });
-        setIsCameraEnabled(true);
-      } catch (error) {
-        console.error('Error accessing camera:', error);
+        const songDoc = doc(db, 'songs', id);
+        const songSnapshot = await getDoc(songDoc);
+
+        if (songSnapshot.exists()) {
+          const songData = songSnapshot.data();
+          const parsedChords = parseChords(songData.chords);
+          setSong({ id: songSnapshot.id, ...songData, chords: parsedChords });
+        } else {
+          setError('Música não encontrada.');
+        }
+      } catch (err) {
+        console.error("Erro ao buscar música:", err);
+        setError('Falha ao carregar a música.');
       }
+      setLoading(false);
     };
-    requestCamera();
-  }, [setIsCameraEnabled]);
 
-  const increaseSensitivity = () => setSensitivity(s => s + 10);
-  const decreaseSensitivity = () => setSensitivity(s => Math.max(10, s - 10));
+    fetchSong();
+  }, [id]);
 
-  if (!song) {
-    return <div className='text-white text-center pt-8'>Música não encontrada.</div>;
+  if (loading) {
+    return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
+  }
+
+  if (error) {
+    return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">{error}</div>;
   }
 
   return (
-    <div className='bg-gray-900 text-white min-h-screen'>
-      <Link 
-        to="/"
-        className='absolute top-4 left-4 z-50 bg-gray-800/80 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors'
-      >
-        &larr; Voltar para Biblioteca
-      </Link>
-
-      <div ref={scrollableRef} className='overflow-y-scroll h-screen p-4 pt-20'>
-        <div className='max-w-2xl mx-auto pb-24'>
-          <h1 className='text-3xl font-bold mb-2'>{song.title}</h1>
-          <h2 className='text-xl text-gray-400 mb-6'>{song.artist}</h2>
-          <div className='text-lg leading-loose'>
-            {song.lyrics.map((line, index) => (
-              <p key={index} className='mb-4'>
-                <span className='chord text-yellow-400'>{line.chord}</span>
-                <br />
-                <span className='lyric'>{line.lyric}</span>
-              </p>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      {/* Controles da Câmera, Rolagem e Status */}
-      <div className='absolute top-4 right-4 w-48 z-50'> {/* Aumentado o width para caber os botões */}
-        <div className="flex flex-col items-stretch text-center gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              {/* Botão para alternar a rolagem */}
-              <button
-                onClick={toggleScrollEnabled}
-                className='bg-blue-600/80 text-white px-3 py-1.5 rounded-lg hover:bg-blue-500 transition-colors text-sm'
-              >
-                {isScrollEnabled ? 'Pausar Rolagem' : 'Ativar Rolagem'}
-              </button>
-
-              {/* Botão para alternar a visibilidade da câmera */}
-              <button
-                onClick={() => setIsCameraViewEnabled(prev => !prev)}
-                className='bg-gray-800/80 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors text-sm'
-              >
-                {isCameraViewEnabled ? 'Ocultar Câm' : 'Ver Câm'}
-              </button>
-            </div>
-            
-            {/* Status do monitoramento, sempre visível */}
-            <p className='text-xs bg-gray-900/50 rounded p-1 w-full'>
-              {trackingStatus}
-            </p>
-        </div>
+    <div className="bg-gray-900 text-white min-h-screen" ref={scrollableRef}>
+      {/* ==== PAINEL DE CONTROLE COMPLETO ==== */}
+      <div className="fixed bottom-4 right-4 bg-gray-900 bg-opacity-80 border border-gray-700 p-4 rounded-lg shadow-2xl z-50 w-60">
+        <video ref={videoRef} className={`w-full h-auto rounded-md mb-2 ${isCameraEnabled ? 'block' : 'hidden'}`} autoPlay playsInline></video>
         
-        <video 
-          ref={videoRef} 
-          className={
-            isCameraViewEnabled
-              ? `w-full h-auto rounded-lg border-2 mt-2 ${isTrackingActive && isScrollEnabled ? 'border-green-500' : 'border-red-500'}`
-              : 'absolute -left-full w-px h-px'
-          }
-          playsInline
-          muted
-          autoPlay
-        />
+        <div className="text-center">
+          <p className="text-xs text-gray-400 mb-2 h-4">{trackingStatus}</p>
+          
+          <button onClick={() => setIsCameraEnabled(prev => !prev)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm mb-2 transition-colors">
+            {isCameraEnabled ? 'Desativar Câmera' : 'Ativar Câmera'}
+          </button>
+          
+          {isCameraEnabled && (
+            <>
+              <button onClick={toggleScrollEnabled} className={`w-full font-bold py-2 px-4 rounded-lg text-sm transition-colors mb-2 ${isScrollEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                {isScrollEnabled ? 'Rolagem Ativa' : 'Rolagem Inativa'}
+              </button>
+
+              <div className="mt-2">
+                <label htmlFor="sensitivity" className="block text-xs text-gray-400 mb-1">Sensibilidade: {sensitivity}</label>
+                <input 
+                  type="range" 
+                  id="sensitivity" 
+                  min="5" 
+                  max="50" 
+                  value={sensitivity}
+                  onChange={(e) => setSensitivity(Number(e.target.value))} 
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className='fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/80 rounded-full flex items-center gap-4 px-4 py-2 text-white z-50'>
-        <button onClick={decreaseSensitivity} className='text-2xl font-bold'>-</button>
-        <span className='text-lg'>Sensibilidade: {sensitivity}</span>
-        <button onClick={increaseSensitivity} className='text-2xl font-bold'>+</button>
+      <div className="max-w-4xl mx-auto p-4 md:p-8 pb-40"> {/* Added padding-bottom to avoid overlap */}
+        <header className="mb-8 text-center">
+           <Link to="/" className="text-blue-400 hover:text-blue-300 mb-4 inline-block">← Voltar para a Biblioteca</Link>
+          <h1 className="text-3xl md:text-5xl font-bold break-words">{song.title}</h1>
+          <p className="text-lg md:text-xl text-gray-400 mt-2">{song.artist}</p>
+          <p className="text-md text-gray-500 mt-1">Tom: {song.tone}</p>
+        </header>
+
+        <main className="bg-gray-800 p-4 md:p-8 rounded-lg shadow-lg text-lg leading-loose font-mono overflow-x-auto">
+          {song.chords?.map((line, lineIndex) => (
+            <div key={lineIndex} className="flex flex-row items-end mb-6">
+              {line.map((segment, segmentIndex) => (
+                <div key={segmentIndex} className="flex-shrink-0">
+                  <span className="block h-6 font-bold text-blue-400">
+                    {segment.chord}
+                  </span>
+                  <span className="whitespace-pre">
+                    {segment.lyric}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </main>
       </div>
     </div>
   );

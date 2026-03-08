@@ -4,12 +4,22 @@ import { FaceMesh } from '@mediapipe/face_mesh';
 import { Camera } from '@mediapipe/camera_utils';
 
 const useFaceScroll = (videoRef, sensitivity) => {
-  const scrollableRef = useRef(null);
+  const scrollableRef = useRef(null); // This ref can still be useful if you want to scroll a specific element in the future.
+  
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
-  const [isTrackingActive, setIsTrackingActive] = useState(false);
+  const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [trackingStatus, setTrackingStatus] = useState('Aguardando câmera...');
+  
+  const isScrollEnabledRef = useRef(isScrollEnabled);
+  const sensitivityRef = useRef(sensitivity);
 
-  const [isScrollEnabled, setIsScrollEnabled] = useState(true); 
+  useEffect(() => {
+    isScrollEnabledRef.current = isScrollEnabled;
+  }, [isScrollEnabled]);
+
+  useEffect(() => {
+    sensitivityRef.current = sensitivity;
+  }, [sensitivity]);
 
   const toggleScrollEnabled = useCallback(() => {
     setIsScrollEnabled(prev => !prev);
@@ -21,15 +31,8 @@ const useFaceScroll = (videoRef, sensitivity) => {
       return;
     }
 
-    // Se a rolagem estiver desativada, desliga a câmera e o rastreamento.
-    // A função de limpeza do useEffect anterior já terá chamado camera.stop().
-    if (!isScrollEnabled) {
-      setTrackingStatus('Rolagem desativada');
-      setIsTrackingActive(false);
-      return; // Impede a reinicialização da câmera
-    }
-
     setTrackingStatus('Iniciando câmera...');
+    let camera = null;
 
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -42,53 +45,70 @@ const useFaceScroll = (videoRef, sensitivity) => {
       minTrackingConfidence: 0.5,
     });
 
-    const camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        await faceMesh.send({ image: videoRef.current });
-      },
-      width: 1280,
-      height: 720,
-    });
-    camera.start();
-
     const onResults = (results) => {
       const faceDetected = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
 
       if (!faceDetected) {
         setTrackingStatus('Rosto não detectado');
-        setIsTrackingActive(false);
         return;
       }
       
+      if (!isScrollEnabledRef.current) {
+        setTrackingStatus('Rolagem pausada');
+        return;
+      }
+
       setTrackingStatus('Rolagem Ativa');
-      setIsTrackingActive(true);
 
       const nose = results.multiFaceLandmarks[0][1];
-      if (!nose || !scrollableRef.current) return;
+      if (!nose) return;
 
       const y = nose.y;
       const deadzone = 0.05;
-      const scrollSpeed = sensitivity;
+      const scrollSpeed = sensitivityRef.current;
 
+      // Use window.scrollBy for global page scrolling
       if (y > 0.5 + deadzone) {
         const scrollAmount = (y - (0.5 + deadzone)) * scrollSpeed;
-        scrollableRef.current.scrollTop += scrollAmount;
+        window.scrollBy(0, scrollAmount);
       } else if (y < 0.5 - deadzone) {
         const scrollAmount = ((0.5 - deadzone) - y) * scrollSpeed;
-        scrollableRef.current.scrollTop -= scrollAmount;
+        window.scrollBy(0, -scrollAmount);
       }
     };
 
     faceMesh.onResults(onResults);
 
-    // Função de limpeza: será chamada quando o componente desmontar ou quando isScrollEnabled mudar
+    if (videoRef.current) {
+        camera = new Camera(videoRef.current, {
+            onFrame: async () => {
+                if (videoRef.current) {
+                    await faceMesh.send({ image: videoRef.current });
+                }
+            },
+            width: 1280,
+            height: 720,
+        });
+        camera.start();
+    }
+    
     return () => {
-      camera.stop();
+      if (camera) {
+        camera.stop();
+      }
       faceMesh.close();
+      setTrackingStatus('Aguardando câmera...');
     };
-  }, [isCameraEnabled, videoRef, sensitivity, isScrollEnabled]);
+  }, [isCameraEnabled, videoRef]);
 
-  return { scrollableRef, setIsCameraEnabled, isTrackingActive, trackingStatus, isScrollEnabled, toggleScrollEnabled };
+  return { 
+    scrollableRef, 
+    isCameraEnabled, 
+    setIsCameraEnabled, 
+    trackingStatus, 
+    isScrollEnabled, 
+    toggleScrollEnabled 
+  };
 };
 
 export default useFaceScroll;
