@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../firebase/config';
 import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import BulkUpload from '../../components/BulkUpload'; // Importando o novo componente
 
 const Dashboard = () => {
   // Estado do formulário
@@ -113,6 +114,7 @@ const Dashboard = () => {
       </header>
       
       <main className="p-8">
+        {/* Formulário de Adicionar/Editar Música */}
         <div className="max-w-4xl mx-auto mb-10">
           <div className="bg-gray-800 p-8 rounded-lg shadow-lg">
             <h2 className="text-2xl font-bold mb-6">{editingSongId ? 'Editando Música' : 'Adicionar Nova Música'}</h2>
@@ -132,8 +134,8 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="mb-6">
-                <label htmlFor="chords" className="block text-sm font-medium mb-2">Cifra</label>
-                <textarea id="chords" value={chords} onChange={(e) => setChords(e.target.value)} rows="15" className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg" placeholder='Formato: [{"chord":"Am","lyric":"Letra..."}]' required></textarea>
+                <label htmlFor="chords" className="block text-sm font-medium mb-2">Cifra (JSON)</label>
+                <textarea id="chords" value={chords} onChange={(e) => setChords(e.target.value)} rows="15" className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg" placeholder='Formato: [[{"chord":"Am","lyric":"Letra..."}]]' required></textarea>
               </div>
               <div className="text-right flex justify-end gap-4">
                 {editingSongId && (
@@ -148,7 +150,13 @@ const Dashboard = () => {
             </form>
           </div>
         </div>
+        
+        {/* Componente de Upload em Lote */}
+        <div className="max-w-4xl mx-auto mb-10">
+            <BulkUpload />
+        </div>
 
+        {/* Lista de Músicas Salvas */}
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-6">Músicas Salvas</h2>
           <div className="bg-gray-800 p-8 rounded-lg shadow-lg">
