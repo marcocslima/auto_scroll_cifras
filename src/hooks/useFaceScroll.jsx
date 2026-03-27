@@ -3,16 +3,19 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { FaceMesh } from '@mediapipe/face_mesh';
 
 // ====================================================================================
-// HOOK AUTÔNOMO E ROBUSTO PARA ROLAGEM FACIAL - VERSÃO FINAL
-// Arquitetura baseada em eventos e com vídeo de detecção sempre ativo.
+// HOOK PARA ROLAGEM FACIAL COM FEEDBACK VISUAL
 // ====================================================================================
-const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
+const useFaceScroll = ({
+  sensitivity: initialSensitivity = 30,
+  deadZone: initialDeadZone = 0.15, // Default gap size
+} = {}) => {
   // --- Refs Internas --- 
   const streamRef = useRef(null);
   const videoRef = useRef(null);
   const faceMeshRef = useRef(null);
   const animationFrameRef = useRef(null);
   const sensitivityRef = useRef(initialSensitivity);
+  const deadZoneGapRef = useRef(initialDeadZone);
 
   // --- Estado Público ---
   const [isActive, setIsActive] = useState(false);
@@ -20,9 +23,20 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
   const [trackingStatus, setTrackingStatus] = useState('Inativo');
   const [videoStream, setVideoStream] = useState(null);
 
+  // Estado para os dados de rastreamento que serão usados na UI
+  const [trackingData, setTrackingData] = useState({
+    nosePosition: { x: 0.5, y: 0.5 }, // Posição do nariz (0-1)
+    thresholds: { upper: 0.5 - initialDeadZone / 2, lower: 0.5 + initialDeadZone / 2 },
+  });
+
+  // --- Funções de Controle Públicas ---
   const setSensitivity = (value) => {
     sensitivityRef.current = value;
   };
+
+  const setDeadZoneGap = useCallback((value) => {
+    deadZoneGapRef.current = value;
+  }, []);
 
   // Função de limpeza robusta para parar tudo
   const cleanup = useCallback(() => {
@@ -48,28 +62,42 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
   // Função para processar os resultados da detecção
   const onResults = useCallback((results) => {
     const faceDetected = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
+    const nose = faceDetected ? results.multiFaceLandmarks[0][1] : null;
+    
+    // Calcula as linhas limite com base na configuração atual
+    const currentDeadZone = deadZoneGapRef.current;
+    const upperThreshold = 0.5 - currentDeadZone / 2;
+    const lowerThreshold = 0.5 + currentDeadZone / 2;
+
+    // Atualiza os dados de rastreamento para a UI (sempre)
+    setTrackingData({
+      nosePosition: nose ? { x: nose.x, y: nose.y } : { x: 0.5, y: 0.5 },
+      thresholds: { upper: upperThreshold, lower: lowerThreshold },
+    });
+
     if (!faceDetected) {
       setTrackingStatus('Rosto não detectado');
       return;
     }
+
     if (!isScrollEnabled) {
       setTrackingStatus('Rolagem pausada');
       return;
     }
 
     setTrackingStatus('Rolagem Ativa');
-    const nose = results.multiFaceLandmarks[0][1];
-    if (!nose) return;
 
     const y = nose.y;
-    const deadzone = 0.05;
     const scrollSpeed = sensitivityRef.current;
     let scrollAmount = 0;
 
-    if (y > 0.5 + deadzone) {
-      scrollAmount = (y - (0.5 + deadzone)) * scrollSpeed;
-    } else if (y < 0.5 - deadzone) {
-      scrollAmount = -((0.5 - deadzone) - y) * scrollSpeed;
+    // Lógica de rolagem baseada nas linhas limite
+    if (y < upperThreshold) {
+      // Rolar para cima (o valor é negativo)
+      scrollAmount = (y - upperThreshold) * scrollSpeed;
+    } else if (y > lowerThreshold) {
+      // Rolar para baixo
+      scrollAmount = (y - lowerThreshold) * scrollSpeed;
     }
 
     if (scrollAmount !== 0) {
@@ -80,11 +108,7 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
   // Loop de detecção principal
   const detectionLoop = useCallback(async () => {
     if (faceMeshRef.current && videoRef.current && !videoRef.current.paused) {
-        try {
-            await faceMeshRef.current.send({ image: videoRef.current });
-        } catch(error) {
-            console.error("MediaPipe send failed:", error);
-        }
+      await faceMeshRef.current.send({ image: videoRef.current });
     }
     animationFrameRef.current = requestAnimationFrame(detectionLoop);
   }, []);
@@ -94,7 +118,6 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
     const videoElement = document.createElement('video');
     videoElement.autoplay = true;
     videoElement.muted = true;
-    // **A CORREÇÃO CRÍTICA:** Manter o vídeo "visível" para o navegador, mas imperceptível para o usuário.
     videoElement.style.cssText = 'position: fixed; bottom: 0; left: 0; width: 1px; height: 1px; z-index: -1;';
     document.body.appendChild(videoElement);
     videoRef.current = videoElement;
@@ -113,12 +136,8 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
 
     return () => {
       cleanup();
-      if (faceMeshRef.current) {
-        faceMeshRef.current.close();
-      }
-      if (videoElement.parentNode) {
-        document.body.removeChild(videoElement);
-      }
+      if (faceMeshRef.current) faceMeshRef.current.close();
+      if (videoElement.parentNode) document.body.removeChild(videoElement);
     };
   }, [cleanup, onResults]);
 
@@ -134,12 +153,9 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
       const videoElement = videoRef.current;
       videoElement.srcObject = stream;
       
-      // O evento `onplaying` é a maneira mais robusta de garantir que o vídeo está pronto
       videoElement.onplaying = () => {
         setTrackingStatus('Iniciando detecção...');
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = requestAnimationFrame(detectionLoop);
       };
 
@@ -152,15 +168,15 @@ const useFaceScroll = ({ sensitivity: initialSensitivity = 30 } = {}) => {
     }
   }, [cleanup, detectionLoop, isActive]);
 
-  const stop = useCallback(() => {
-    cleanup();
-  }, [cleanup]);
+  const stop = useCallback(() => cleanup(), [cleanup]);
+  const toggleScroll = useCallback(() => setIsScrollEnabled(prev => !prev), []);
 
-  const toggleScroll = useCallback(() => {
-    setIsScrollEnabled(prev => !prev);
-  }, []);
-
-  return { start, stop, isActive, isScrollEnabled, toggleScroll, trackingStatus, videoStream, setSensitivity };
+  // Retorna os controles e os novos dados de rastreamento
+  return { 
+    start, stop, isActive, isScrollEnabled, toggleScroll, 
+    trackingStatus, videoStream, setSensitivity, setDeadZoneGap, 
+    trackingData, initialDeadZone 
+  };
 };
 
 export default useFaceScroll;

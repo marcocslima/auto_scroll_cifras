@@ -1,0 +1,27 @@
+# Metamorfose Ambulante
+## Raul Seixas
+Tom: C
+
+```text
+[C]Eu prefiro ser
+Essa metamorfose ambulante
+[G]Eu prefiro ser
+Essa metamorfose ambulante
+[F]Do que ter aquela velha opinião
+Formada sobre [C]tudo
+[G]Do que ter aquela velha opinião
+Formada sobre [C]tudo
+```
+---
+# Garota de Ipanema
+## Tom Jobim & Vinicius de Moraes
+Tom: F
+
+```text
+[F7M]Olha que coisa mais linda
+Mais cheia de [G7(9)]graça
+É ela, me[Gm7]nina
+Que vem e que [C7(9-)]passa
+Num [F7M(9)]doce ba[F#º]lanço
+A ca[Gm7]minho do [C7(9-)]mar
+```
