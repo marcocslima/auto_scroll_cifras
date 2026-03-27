@@ -30,27 +30,24 @@ const Song = () => {
   const displayVideoRef = useRef(null);
   const canvasRef = useRef(null);
 
-  // --- HOOK DE ROLAGEM FACIAL ---
+  // --- HOOK DE ROLAGEM FACIAL COM CONTROLES AVANÇADOS ---
   const {
     start, stop, isActive, isScrollEnabled, toggleScroll, 
-    trackingStatus, videoStream, setSensitivity, setDeadZoneGap, 
-    trackingData, initialDeadZone 
+    trackingStatus, videoStream, 
+    setSensitivity, setDeadZoneGap, setDeadZoneCenter,
+    trackingData, initialDeadZoneGap, initialDeadZoneCenter 
   } = useFaceScroll();
 
+  // --- ESTADOS LOCAIS PARA OS CONTROLES ---
   const [sensitivity, setSensitivityState] = useState(30);
-  const [deadZone, setDeadZoneState] = useState(initialDeadZone || 0.15);
+  const [deadZoneGap, setDeadZoneGapState] = useState(initialDeadZoneGap || 0.15);
+  const [deadZoneCenter, setDeadZoneCenterState] = useState(initialDeadZoneCenter || 0.5);
 
   // --- EFEITOS ---
   useEffect(() => {
     const videoElement = displayVideoRef.current;
-    if (videoElement && videoStream) {
-      videoElement.srcObject = videoStream;
-    } 
-    return () => {
-      if (videoElement && videoElement.srcObject) {
-        videoElement.srcObject = null;
-      }
-    };
+    if (videoElement && videoStream) videoElement.srcObject = videoStream;
+    return () => { if (videoElement && videoElement.srcObject) videoElement.srcObject = null; };
   }, [videoStream]);
 
   useEffect(() => {
@@ -61,13 +58,11 @@ const Song = () => {
         const songSnapshot = await getDoc(songDocRef);
         if (songSnapshot.exists()) {
           const songData = songSnapshot.data();
-          const chordsArray = getChordsArray(songData.chords);
-          setSong({ id: songSnapshot.id, ...songData, chords: chordsArray });
+          setSong({ id: songSnapshot.id, ...songData, chords: getChordsArray(songData.chords) });
         } else {
           setError('Música não encontrada.');
         }
       } catch (err) {
-        console.error("Erro ao buscar música:", err);
         setError('Falha ao carregar a música.');
       }
       setLoading(false);
@@ -80,7 +75,6 @@ const Song = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = displayVideoRef.current;
-    // Só desenha se tudo estiver pronto e visível
     if (!canvas || !video || !isActive || !isCameraPreviewVisible || !trackingData) return;
 
     const ctx = canvas.getContext('2d');
@@ -93,25 +87,25 @@ const Song = () => {
 
     ctx.clearRect(0, 0, width, height);
 
-    // Desenha a linha superior (rolar para cima)
+    // Linha superior (azul)
     const upperY = trackingData.thresholds.upper * height;
     ctx.beginPath();
     ctx.moveTo(0, upperY);
     ctx.lineTo(width, upperY);
-    ctx.strokeStyle = '#3b82f6'; // Azul
+    ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Desenha a linha inferior (rolar para baixo)
+    // Linha inferior (vermelha)
     const lowerY = trackingData.thresholds.lower * height;
     ctx.beginPath();
     ctx.moveTo(0, lowerY);
     ctx.lineTo(width, lowerY);
-    ctx.strokeStyle = '#ef4444'; // Vermelho
+    ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Desenha a posição do nariz
+    // Posição do nariz (branco)
     if (trackingData.nosePosition) {
         const noseX = trackingData.nosePosition.x * width;
         const noseY = trackingData.nosePosition.y * height;
@@ -123,7 +117,7 @@ const Song = () => {
   }, [trackingData, isActive, isCameraPreviewVisible]);
 
 
-  // --- HANDLERS ---
+  // --- HANDLERS DOS CONTROLES ---
   const handleToggleFaceScroll = () => isActive ? stop() : start();
   
   const handleSensitivityChange = (e) => {
@@ -132,10 +126,16 @@ const Song = () => {
       setSensitivity(value);
   };
 
-  const handleDeadZoneChange = (e) => {
+  const handleDeadZoneGapChange = (e) => {
     const value = Number(e.target.value);
-    setDeadZoneState(value);
+    setDeadZoneGapState(value);
     setDeadZoneGap(value);
+  };
+  
+  const handleDeadZoneCenterChange = (e) => {
+    const value = Number(e.target.value);
+    setDeadZoneCenterState(value);
+    setDeadZoneCenter(value);
   };
 
   if (loading) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
@@ -160,23 +160,26 @@ const Song = () => {
           <p className="text-sm text-gray-400 h-5 text-center">{isActive ? trackingStatus : "Rolagem facial inativa"}</p>
           
           {isActive && (
-            <details className="border-t border-gray-700 pt-3">
+            <details className="border-t border-gray-700 pt-3" open>
               <summary className="cursor-pointer list-none text-center text-blue-400 hover:text-blue-300">Configurações</summary>
               <div className="mt-4 space-y-4">
                 <button onClick={() => setIsCameraPreviewVisible(p => !p)} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">
                   {isCameraPreviewVisible ? 'Ocultar Câmera' : 'Mostrar Câmera'}
                 </button>
                 
-                {/* Slider de Sensibilidade */}
                 <div className="pt-2">
                   <label htmlFor="sensitivity" className="block text-xs text-gray-400 mb-1">Sensibilidade da Rolagem: {sensitivity}</label>
                   <input type="range" id="sensitivity" min="10" max="100" value={sensitivity} onChange={handleSensitivityChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
 
-                {/* Slider de Zona Morta */}
                 <div className="pt-2">
-                  <label htmlFor="deadZone" className="block text-xs text-gray-400 mb-1">Tamanho da Zona Morta: {Math.round(deadZone * 100)}%</label>
-                  <input type="range" id="deadZone" min="0.05" max="0.4" step="0.01" value={deadZone} onChange={handleDeadZoneChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/>
+                  <label htmlFor="deadZoneGap" className="block text-xs text-gray-400 mb-1">Tamanho da Zona Morta: {Math.round(deadZoneGap * 100)}%</label>
+                  <input type="range" id="deadZoneGap" min="0.05" max="0.4" step="0.01" value={deadZoneGap} onChange={handleDeadZoneGapChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+
+                <div className="pt-2">
+                  <label htmlFor="deadZoneCenter" className="block text-xs text-gray-400 mb-1">Posição Vertical da Zona Morta: {Math.round(deadZoneCenter * 100)}%</label>
+                  <input type="range" id="deadZoneCenter" min="0.3" max="0.7" step="0.01" value={deadZoneCenter} onChange={handleDeadZoneCenterChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/>
                 </div>
               </div>
             </details>
