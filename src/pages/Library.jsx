@@ -110,7 +110,7 @@ const Library = () => {
         <p className="text-center text-gray-400 mb-8">1. Calibre a rolagem. 2. Escolha uma música.</p>
 
         <div className="max-w-xl mx-auto">
-            <details className="bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-4 mb-6" open>
+            <details className="bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-4 mb-6">
                 <summary className="cursor-pointer list-none text-center font-semibold text-blue-400 hover:text-blue-300">Calibração da Rolagem Facial</summary>
                 <div className="mt-4 pt-4 border-t border-gray-700 space-y-4">
                     <button onClick={() => setIsCameraPreviewVisible(p => !p)} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">
