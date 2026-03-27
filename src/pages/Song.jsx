@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
@@ -19,13 +19,13 @@ const getChordsArray = (chordsData) => {
 
 const Song = () => {
   const { id } = useParams();
+  const navigate = useNavigate(); // Hook para navegação programática
   const [song, setSong] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
   const { start, stop, isScrollEnabled, trackingStatus } = useSettings();
 
-  // Efeito para buscar a música (sem alterações)
   useEffect(() => {
     const fetchSong = async () => {
       setLoading(true);
@@ -35,33 +35,32 @@ const Song = () => {
         if (songSnapshot.exists()) {
           const songData = songSnapshot.data();
           setSong({ id: songSnapshot.id, ...songData, chords: getChordsArray(songData.chords) });
-        } else {
-          setError('Música não encontrada.');
-        }
-      } catch (err) {
-        setError('Falha ao carregar a música.');
-      }
+        } else { setError('Música não encontrada.'); }
+      } catch (err) { setError('Falha ao carregar a música.'); }
       setLoading(false);
     };
     fetchSong();
 
-    // ========= CORREÇÃO CRÍTICA: LIMPEZA AO SAIR DA PÁGINA =========
-    // Quando o componente é desmontado (usuário sai da página), 
-    // a função stop() é chamada para garantir que tudo seja desligado.
+    // Garante que tudo é desligado quando o usuário sai da página
     return () => stop();
-    // O `stop` é uma função estável do hook, então a dependência é segura.
   }, [id, stop]);
 
-  // Handler simplificado: ou ativa com rolagem, ou para tudo.
   const handleToggleFaceScroll = () => {
     if (isScrollEnabled) {
       stop(); 
     } else {
-      // Como a câmera estará sempre desligada ao entrar na página,
-      // isso vai iniciar a detecção e a rolagem do zero.
       start({ scroll: true });
     }
   };
+
+  // ========= NOVA FUNÇÃO PARA NAVEGAÇÃO SEGURA =========
+  const handleGoBack = () => {
+    // 1. Desliga a câmera e a rolagem para evitar conflitos.
+    stop();
+    // 2. Navega para a página inicial.
+    navigate('/');
+  };
+
 
   if (loading) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
   if (error) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">{error}</div>;
@@ -71,7 +70,10 @@ const Song = () => {
     <div className="bg-gray-900 text-white min-h-screen font-sans">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
         <header className="mb-6 text-center">
-           <Link to="/" className="text-blue-400 hover:text-blue-300 mb-4 inline-block">← Voltar para a Biblioteca</Link>
+           {/* O Link foi substituído por um botão que chama a nova função */}
+           <button onClick={handleGoBack} className="text-blue-400 hover:text-blue-300 mb-4 inline-block bg-transparent border-none p-0 cursor-pointer">
+             ← Voltar para a Biblioteca
+           </button>
           <h1 className="text-4xl md:text-5xl font-bold break-words">{song.title}</h1>
           <p className="text-xl md:text-2xl text-gray-400 mt-2">{song.artist}</p>
           <p className="text-md text-gray-500 mt-1">Tom: {song.tone}</p>
