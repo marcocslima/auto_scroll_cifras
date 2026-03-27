@@ -5,15 +5,35 @@ import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import useFaceScroll from '../hooks/useFaceScroll';
 
-const parseChords = (chordsString) => {
-  try {
-    const parsed = JSON.parse(chordsString);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    console.error("Erro ao parsear acordes:", e);
-    return [];
+// This function now handles both new (array) and old (string) formats
+const getChordsArray = (chordsData) => {
+  // If it's already an array, it's the new format.
+  if (Array.isArray(chordsData)) {
+    return chordsData;
   }
+
+  // If it's a string, it might be the old JSON format.
+  if (typeof chordsData === 'string') {
+    try {
+      const parsed = JSON.parse(chordsData);
+      // The old format could be a nested array, e.g., [[{...}]]
+      if (Array.isArray(parsed) && Array.isArray(parsed[0])) {
+        return parsed.flat(); // Flatten [[{...}]] to [{...}]
+      }
+      // Or just a simple array string, e.g., '[{...}]'
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (e) {
+      console.error("Erro ao parsear acordes da string:", e);
+      return []; // Return empty on parsing error
+    }
+  }
+
+  // Return empty array if data is not in a recognized format
+  return [];
 };
+
 
 const Song = () => {
   const { id } = useParams();
@@ -29,7 +49,7 @@ const Song = () => {
     start,
     stop,
     isActive,
-    isScrollEnabled, // Manter o estado, mesmo sem o botão visível por enquanto
+    isScrollEnabled,
     toggleScroll, 
     trackingStatus,
     videoStream,
@@ -56,7 +76,9 @@ const Song = () => {
         const songSnapshot = await getDoc(songDocRef);
         if (songSnapshot.exists()) {
           const songData = songSnapshot.data();
-          setSong({ id: songSnapshot.id, ...songData, chords: parseChords(songData.chords) });
+          // Use the new robust function to get the chords array
+          const chordsArray = getChordsArray(songData.chords);
+          setSong({ id: songSnapshot.id, ...songData, chords: chordsArray });
         } else {
           setError('Música não encontrada.');
         }
@@ -102,7 +124,7 @@ const Song = () => {
           <p className="text-md text-gray-500 mt-1">Tom: {song.tone}</p>
         </header>
 
-        {/* PAINEL DE CONTROLE REESTRUTURADO */}
+        {/* CONTROL PANEL */}
         <div className="bg-gray-800 border border-gray-700 rounded-lg mb-6 shadow-lg p-4 space-y-3">
           <button 
             onClick={handleToggleFaceScroll} 
@@ -144,7 +166,7 @@ const Song = () => {
           )}
         </div>
 
-        {/* Container da Pré-visualização da Câmera (tamanho restaurado) */}
+        {/* Camera Preview Container */}
         <div className={`flex justify-center mb-6 overflow-hidden transition-all duration-500 ease-in-out ${isActive && isCameraPreviewVisible ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
             <video 
                 ref={displayVideoRef}
@@ -155,18 +177,18 @@ const Song = () => {
             />
         </div>
 
-        {/* CONTEÚDO DA MÚSICA */}
+        {/* SONG CONTENT - CORRECTED */}
         <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-loose font-mono overflow-x-auto">
-          {song.chords.length > 0 ? (
-            song.chords.map((line, lineIndex) => (
-              <div key={lineIndex} className="flex flex-wrap items-end mb-4">
-                {line.map((segment, segmentIndex) => (
-                  <div key={segmentIndex} className="mr-4 mb-2">
-                    <span className="block h-6 font-bold text-blue-400">{segment.chord || ' '}</span>
-                    <span className="whitespace-pre-wrap">{segment.lyric}</span>
-                  </div>
-                ))}
-              </div>
+          {song.chords && song.chords.length > 0 ? (
+            song.chords.map((line, index) => (
+                <div key={index} className="flex items-baseline mb-3">
+                    <div className="w-20 flex-shrink-0">
+                        <span className="font-bold text-blue-400">{line.chord}</span>
+                    </div>
+                    <div className="flex-grow pl-4">
+                        <span className="whitespace-pre-wrap">{line.lyric}</span>
+                    </div>
+                </div>
             ))
           ) : (
             <p className="text-gray-400">Nenhuma cifra disponível para esta música.</p>
