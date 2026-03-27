@@ -1,0 +1,22 @@
+## Contexto do Projeto: AutoScroll Cifras
+
+**Situação Atual (Resumo do Desenvolvimento):**
+
+O foco principal do desenvolvimento até o momento foi a construção e o refinamento da página de visualização de músicas (`src/pages/Song.jsx`), que permite aos usuários verem cifras de músicas com uma funcionalidade de rolagem automática controlada por movimentos faciais.
+
+**Últimas Conquistas e Estado da Funcionalidade:**
+
+1.  **Interface da Página da Música (`Song.jsx`):**
+    *   **Controles da Rolagem Facial:** A interface de usuário para os controles foi significativamente aprimorada com base no feedback. O design atual consiste em:
+        *   Um **botão de ativação principal** ("Ativar/Parar Rolagem Facial") que está sempre visível.
+        *   Um **menu expansível de "Configurações"** que só aparece quando a rolagem está ativa, mantendo a interface limpa.
+        *   Dentro das configurações, o usuário pode **mostrar/ocultar a visualização da câmera** e **ajustar a sensibilidade** da rolagem.
+    *   **Visualização da Câmera:** A pré-visualização da câmera agora começa oculta por padrão para maior privacidade. Quando ativada, ela aparece em uma seção dedicada abaixo dos controles e com um tamanho proporcional.
+    *   **Responsividade:** O layout da cifra (acordes e letras) foi ajustado para ser totalmente responsivo, garantindo uma boa experiência de leitura em dispositivos móveis.
+
+2.  **Servidor de Desenvolvimento:** O ambiente está configurado com `Vite` e `Node.js`. O servidor de desenvolvimento está estável e foi usado para testar e validar todas as alterações recentes na interface.
+
+**Próximo Passo Proposto (Pausa Atual):**
+
+*   **Melhorar a Experiência de Cadastro de Cifras:** A tarefa imediata a ser retomada é a melhoria do painel de administração (`Dashboard.jsx`). Atualmente, o cadastro de cifras exige a inserção manual de uma string no formato JSON, o que é pouco intuitivo e propenso a erros.
+*   **Plano:** A ideia é substituir o campo de texto `<textarea>` por um **editor de cifras visual e interativo**. Este editor permitiria ao administrador adicionar e editar linhas de letra e seus respectivos acordes de forma dinâmica, gerando o JSON necessário automaticamente em segundo plano. Isso tornará o processo de adição de novas músicas muito mais rápido, fácil e agradável.
