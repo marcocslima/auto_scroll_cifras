@@ -30,19 +30,33 @@ const parseMarkdownToSong = (markdown) => {
       isInsideLyricsBlock = false;
       continue;
     }
+
     if (isInsideLyricsBlock) {
-      // Regex to capture a chord in brackets and the rest as the lyric
-      const match = line.match(/^\s*(?:\[(.*?)\])?\s*(.*)/);
-      if (match) {
+      const trimmedLine = line.trim();
+
+      // Rule 1: Check if the line is a section title, e.g., [Intro]
+      const sectionMatch = trimmedLine.match(/^\s*\[([^\]]+)\]\s*$/);
+      if (sectionMatch) {
         lyrics.push({
-          chord: match[1] || '', // Chord (e.g., "Am") or empty string
-          lyric: match[2] || '', // Lyric
+          section: sectionMatch[1].trim()
         });
+        continue; // Go to the next line
+      }
+
+      // Rule 2: Check if the line is a chord/lyric line.
+      const lyricMatch = line.match(/^\s*(?:\[([^\]]*)\])?\s*(.*)/);
+      if (lyricMatch) {
+        const chord = lyricMatch[1] || '';
+        const lyric = lyricMatch[2] || '';
+        
+        // Only push if there's a chord or a non-empty lyric to avoid blank lines
+        if (chord || lyric.trim()) {
+           lyrics.push({ chord, lyric });
+        }
       }
     }
   }
 
-  // Fallback if title/artist not in markdown
   return { title, artist, lyrics };
 };
 
@@ -55,28 +69,34 @@ const convertSongToMarkdown = (song) => {
     const artist = `## ${song.artist}`;
     
     let lyrics_array = [];
-    // The 'chords' field might be an array (new format) or a JSON string (old format)
     if (Array.isArray(song.chords)) {
         lyrics_array = song.chords;
     } else if (typeof song.chords === 'string') {
         try {
-            // It might be a JSON string of the array of lyrics
             const parsed = JSON.parse(song.chords);
-            // The old format might have been an array within an array
             if(Array.isArray(parsed) && Array.isArray(parsed[0])) {
                 lyrics_array = parsed[0];
             } else if (Array.isArray(parsed)) {
                 lyrics_array = parsed;
             }
         } catch (e) {
-            // If it's not valid JSON, we can't do much.
             console.error("Could not parse 'chords' string to JSON:", song.chords);
             return `${title}\n${artist}\n\n\`\`\`text\n[ERRO AO LER CIFRA ANTIGA]\n\`\`\``;
         }
     }
 
     const lyricsContent = lyrics_array.map(line => {
-        return line.chord ? `[${line.chord}] ${line.lyric}` : line.lyric;
+      if (line.section) {
+        return `[${line.section}]`;
+      }
+      let output = '';
+      if (line.chord) {
+        output += `[${line.chord}]`;
+      }
+      if (line.lyric) {
+        output += (line.chord ? ' ' : '') + line.lyric;
+      }
+      return output;
     }).join('\n');
 
     return `${title}\n${artist}\n\n\`\`\`text\n${lyricsContent}\n\`\`\``;
@@ -242,6 +262,7 @@ const Dashboard = () => {
 ## Nome do Artista
 
 \`\`\`text
+[Intro]
 [Am] Letra da primeira linha
 [C] Letra da segunda linha
 ...
