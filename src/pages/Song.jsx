@@ -27,7 +27,7 @@ const Song = () => {
   const [error, setError] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  const { start, stop, isScrollEnabled, trackingStatus } = useSettings();
+  const { start, stop, pause, resume, isScrollEnabled, trackingStatus } = useSettings();
 
   useEffect(() => {
     const fetchSong = async () => {
@@ -49,7 +49,6 @@ const Song = () => {
   const sections = useMemo(() => {
     if (!song || !song.chords) return [];
     let sectionCounter = 0;
-    const seenSections = {};
     return song.chords
       .filter(line => line.section)
       .map((sec) => {
@@ -58,12 +57,36 @@ const Song = () => {
       });
   }, [song]);
 
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const handleScrollAndPause = (scrollAction) => {
+    if (!isScrollEnabled) {
+      scrollAction();
+      return;
     }
+
+    pause();
+    scrollAction();
+
+    // Usa um timeout para garantir que a rolagem tenha começado antes de resumir
+    setTimeout(() => {
+      resume();
+    }, 1000); // 1 segundo é um tempo seguro para a maioria das animações de rolagem
   };
+
+  const scrollToSection = (sectionId) => {
+    handleScrollAndPause(() => {
+      const element = document.getElementById(sectionId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  };
+
+  const scrollToTop = () => {
+    handleScrollAndPause(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  };
+
 
   useEffect(() => {
     const handleScroll = () => { setShowBackToTop(window.scrollY > 200); };
@@ -73,7 +96,6 @@ const Song = () => {
 
   const handleToggleFaceScroll = () => { if (isScrollEnabled) stop(); else start({ scroll: true }); };
   const handleGoBack = () => { stop(); navigate('/'); };
-  const scrollToTop = () => { window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   if (loading) return <div className="text-white min-h-screen flex items-center justify-center">Carregando...</div>;
   if (error) return <div className="text-white min-h-screen flex items-center justify-center">{error}</div>;
