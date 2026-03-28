@@ -2,9 +2,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { FaceMesh } from '@mediapipe/face_mesh';
 
-// ====================================================================================
-// HOOK DE ROLAGEM FACIAL - VERSÃO FINAL E ROBUSTA
-// ====================================================================================
 const useFaceScroll = ({
   sensitivity: initialSensitivity = 30,
   deadZoneGap: initialDeadZoneGap = 0.15, 
@@ -17,8 +14,8 @@ const useFaceScroll = ({
   const [videoStream, setVideoStream] = useState(null);
   const [trackingData, setTrackingData] = useState({ thresholds: { upper: 0, lower: 0 }, nosePosition: null });
 
-  // Refs para valores que mudam com frequência e para objetos que persistem
   const isScrollEnabledRef = useRef(isScrollEnabled);
+  const isPausedRef = useRef(false); // Ref para o estado de pausa
   const sensitivityRef = useRef(initialSensitivity);
   const deadZoneGapRef = useRef(initialDeadZoneGap);
   const deadZoneCenterRef = useRef(initialDeadZoneCenter);
@@ -27,7 +24,6 @@ const useFaceScroll = ({
   const animationFrameRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Sincroniza o ref com o estado de rolagem para acesso no loop de animação
   useEffect(() => {
     isScrollEnabledRef.current = isScrollEnabled;
   }, [isScrollEnabled]);
@@ -37,9 +33,12 @@ const useFaceScroll = ({
   const setDeadZoneGap = useCallback((value) => { deadZoneGapRef.current = value; }, []);
   const setDeadZoneCenter = useCallback((value) => { deadZoneCenterRef.current = value; }, []);
 
+  // Novas funções de Pausa e Resumo
+  const pause = useCallback(() => { isPausedRef.current = true; }, []);
+  const resume = useCallback(() => { isPausedRef.current = false; }, []);
+
   // --- Lógica Principal ---
 
-  // Função de limpeza: para tudo e reseta o estado
   const stop = useCallback(() => {
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
@@ -51,10 +50,10 @@ const useFaceScroll = ({
     setVideoStream(null);
     setIsActive(false);
     setIsScrollEnabled(false);
+    isPausedRef.current = false; // Garante que a pausa seja resetada ao parar
     setTrackingStatus('Inativo');
   }, []);
 
-  // Função que processa os resultados da deteção facial
   const onResults = useCallback((results) => {
     const faceDetected = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
     const nose = faceDetected ? results.multiFaceLandmarks[0][1] : null;
@@ -68,9 +67,14 @@ const useFaceScroll = ({
 
     if (!faceDetected) return setTrackingStatus('Rosto não detectado');
     
-    // USA O REF: Garante que o valor mais recente seja lido, resolvendo o problema de "stale state"
+    // VERIFICAÇÕES DE ESTADO EM ORDEM DE PRIORIDADE
+    // 1. A rolagem está pausada temporariamente? (Ex: clique em atalho)
+    if (isPausedRef.current) return setTrackingStatus('Rolagem pausada'); 
+
+    // 2. O modo de rolagem está desativado? (Ex: modo de calibração)
     if (!isScrollEnabledRef.current) return setTrackingStatus('Calibração ativa. Rolagem pausada.');
 
+    // Se passou em todas as verificações, a rolagem está ativa
     setTrackingStatus('Rolagem Ativa');
 
     const y = nose.y;
@@ -79,9 +83,8 @@ const useFaceScroll = ({
     else if (y > lowerThreshold) scrollAmount = (y - lowerThreshold) * sensitivityRef.current;
 
     if (scrollAmount !== 0) window.scrollBy(0, scrollAmount);
-  }, []); // As dependências são refs, então esta função é estável e não precisa ser recriada
+  }, []); 
 
-  // Loop de deteção que envia o vídeo para o FaceMesh
   const detectionLoop = useCallback(async () => {
     if (faceMeshRef.current && videoRef.current && !videoRef.current.paused) {
       await faceMeshRef.current.send({ image: videoRef.current });
@@ -89,15 +92,12 @@ const useFaceScroll = ({
     animationFrameRef.current = requestAnimationFrame(detectionLoop);
   }, []);
 
-  // Função para iniciar a deteção e a câmera
   const start = useCallback(async ({ scroll = false } = {}) => {
-    // Define o estado de rolagem imediatamente
     setIsScrollEnabled(scroll);
+    isPausedRef.current = false; // Garante que a rolagem comece ativa
 
-    // Se a câmera já está ativa, não faz nada (a mudança de `isScrollEnabled` já foi feita)
     if (isActive) return;
 
-    // Se a câmera está inativa, inicia o processo completo
     try {
       setTrackingStatus('Iniciando câmera...');
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
@@ -116,11 +116,10 @@ const useFaceScroll = ({
     } catch (error) {
       console.error('Falha ao iniciar a detecção facial:', error);
       setTrackingStatus('Erro de câmera');
-      stop(); // Limpa tudo em caso de erro
+      stop();
     }
   }, [isActive, detectionLoop, stop]);
 
-  // Efeito principal que inicializa e limpa tudo
   useEffect(() => {
     const videoElement = document.createElement('video');
     videoElement.autoplay = true; videoElement.muted = true;
@@ -133,16 +132,16 @@ const useFaceScroll = ({
     faceMesh.onResults(onResults);
     faceMeshRef.current = faceMesh;
 
-    // Função de limpeza que é chamada quando o hook é desmontado
     return () => {
       stop();
       if (faceMeshRef.current) faceMeshRef.current.close();
       if (videoElement.parentNode) document.body.removeChild(videoElement);
     };
-  }, [onResults, stop]); // `onResults` e `stop` são estáveis
+  }, [onResults, stop]);
 
   return { 
-    start, stop, isActive, isScrollEnabled, 
+    start, stop, pause, resume, // <<<< Funções de controle exportadas
+    isActive, isScrollEnabled, 
     trackingStatus, videoStream, 
     setSensitivity, setDeadZoneGap, setDeadZoneCenter, 
     trackingData, initialDeadZoneGap, initialDeadZoneCenter
