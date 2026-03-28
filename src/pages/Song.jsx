@@ -10,22 +10,26 @@ const getChordsArray = (chordsData) => {
   if (typeof chordsData === 'string') {
     try {
       const parsed = JSON.parse(chordsData);
-      if (Array.isArray(parsed) && Array.isArray(parsed[0])) return parsed.flat();
-      if (Array.isArray(parsed)) return parsed;
-    } catch (e) { console.error("Erro ao parsear acordes:", e); return []; }
+      return Array.isArray(parsed) ? (Array.isArray(parsed[0]) ? parsed.flat() : parsed) : [];
+    } catch (e) { 
+      console.error("Erro ao parsear acordes:", e); 
+      return []; 
+    }
   }
   return [];
 };
 
 const Song = () => {
   const { id } = useParams();
-  const navigate = useNavigate(); // Hook para navegação programática
+  const navigate = useNavigate();
   const [song, setSong] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
   const { start, stop, isScrollEnabled, trackingStatus } = useSettings();
 
+  // Efeito para buscar a música no Firestore
   useEffect(() => {
     const fetchSong = async () => {
       setLoading(true);
@@ -40,27 +44,31 @@ const Song = () => {
       setLoading(false);
     };
     fetchSong();
-
-    // Garante que tudo é desligado quando o usuário sai da página
-    return () => stop();
+    return () => stop(); // Desliga a câmera ao sair da página
   }, [id, stop]);
 
+  // Efeito para controlar a visibilidade do botão "Voltar ao Topo"
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 200);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const handleToggleFaceScroll = () => {
-    if (isScrollEnabled) {
-      stop(); 
-    } else {
-      start({ scroll: true });
-    }
+    if (isScrollEnabled) stop(); 
+    else start({ scroll: true });
   };
 
-  // ========= NOVA FUNÇÃO PARA NAVEGAÇÃO SEGURA =========
   const handleGoBack = () => {
-    // 1. Desliga a câmera e a rolagem para evitar conflitos.
-    stop();
-    // 2. Navega para a página inicial.
+    stop(); // Garante que a câmera seja desligada
     navigate('/');
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (loading) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
   if (error) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">{error}</div>;
@@ -70,21 +78,14 @@ const Song = () => {
     <div className="bg-gray-900 text-white min-h-screen font-sans">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
         <header className="mb-6 text-center">
-           {/* O Link foi substituído por um botão que chama a nova função */}
-           <button onClick={handleGoBack} className="text-blue-400 hover:text-blue-300 mb-4 inline-block bg-transparent border-none p-0 cursor-pointer">
+          <button onClick={handleGoBack} className="text-blue-400 hover:text-blue-300 mb-4 inline-block">
              ← Voltar para a Biblioteca
            </button>
           <h1 className="text-4xl md:text-5xl font-bold break-words">{song.title}</h1>
           <p className="text-xl md:text-2xl text-gray-400 mt-2">{song.artist}</p>
-          <p className="text-md text-gray-500 mt-1">Tom: {song.tone}</p>
+          <p className="text-md text-gray-500 mt-1">Tom: {song.tone || 'Não especificado'}</p>
+          <p className="text-sm text-gray-400 h-5 mt-4">{isScrollEnabled ? trackingStatus : "Rolagem facial inativa"}</p>
         </header>
-
-        <div className="bg-gray-800 border border-gray-700 rounded-lg mb-6 shadow-lg p-4 space-y-3 max-w-xl mx-auto">
-          <button onClick={handleToggleFaceScroll} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg">
-            {isScrollEnabled ? 'Parar Rolagem Facial' : 'Ativar Rolagem Facial'}
-          </button>
-          <p className="text-sm text-gray-400 h-5 text-center">{isScrollEnabled ? trackingStatus : "Rolagem facial inativa"}</p>
-        </div>
 
         <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-loose font-mono overflow-x-auto">
           {song.chords && song.chords.length > 0 ? (
@@ -98,6 +99,28 @@ const Song = () => {
             <p className="text-gray-400">Nenhuma cifra disponível para esta música.</p>
           )}
         </main>
+      </div>
+
+      {/* Botões Flutuantes */}
+      <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
+        {/* Botão de Ativar/Desativar Rolagem */}
+        <button 
+          onClick={handleToggleFaceScroll} 
+          className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isScrollEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+            {isScrollEnabled ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"></path></svg>
+            ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"></path></svg>
+            )}
+        </button>
+        {/* Botão de Voltar ao Topo */}
+        {showBackToTop && (
+          <button 
+            onClick={scrollToTop} 
+            className="bg-gray-700 hover:bg-gray-600 text-white font-bold p-4 rounded-full shadow-lg transition-opacity duration-300">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+          </button>
+        )}
       </div>
     </div>
   );
