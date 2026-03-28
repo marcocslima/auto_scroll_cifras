@@ -4,9 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../firebase/config';
 import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import BulkUpload from '../../components/BulkUpload';
-import ChordEditor from '../../components/ChordEditor';
 
-// Analisa o conteúdo Markdown para extrair título, artista e linhas da cifra
+// Helper function to parse Markdown input into a song object
 const parseMarkdownToSong = (markdown) => {
   const lines = markdown.split('\n');
   let title = '';
@@ -32,46 +31,81 @@ const parseMarkdownToSong = (markdown) => {
       continue;
     }
     if (isInsideLyricsBlock) {
-      const match = line.match(/^\[(.*?)\]\s*(.*)/);
+      // Regex to capture a chord in brackets and the rest as the lyric
+      const match = line.match(/^\s*(?:\[(.*?)\])?\s*(.*)/);
       if (match) {
-        lyrics.push({ chord: match[1] || '', lyric: match[2] || '' });
-      } else {
-        lyrics.push({ chord: '', lyric: line });
+        lyrics.push({
+          chord: match[1] || '', // Chord (e.g., "Am") or empty string
+          lyric: match[2] || '', // Lyric
+        });
       }
     }
   }
+
+  // Fallback if title/artist not in markdown
   return { title, artist, lyrics };
 };
 
-// Converte um objeto de música de volta para o formato Markdown
+
+// Helper function to convert a song object back to Markdown for editing
 const convertSongToMarkdown = (song) => {
-  if (!song || !song.title) return '';
-  const title = `# ${song.title}`;
-  const artist = `## ${song.artist}`;
-  let lyrics_array = song.chords || [];
+    if (!song || !song.title) return '';
 
-  const lyricsContent = lyrics_array.map(line => {
-    return line.chord ? `[${line.chord}] ${line.lyric}` : line.lyric;
-  }).join('\n');
+    const title = `# ${song.title}`;
+    const artist = `## ${song.artist}`;
+    
+    let lyrics_array = [];
+    // The 'chords' field might be an array (new format) or a JSON string (old format)
+    if (Array.isArray(song.chords)) {
+        lyrics_array = song.chords;
+    } else if (typeof song.chords === 'string') {
+        try {
+            // It might be a JSON string of the array of lyrics
+            const parsed = JSON.parse(song.chords);
+            // The old format might have been an array within an array
+            if(Array.isArray(parsed) && Array.isArray(parsed[0])) {
+                lyrics_array = parsed[0];
+            } else if (Array.isArray(parsed)) {
+                lyrics_array = parsed;
+            }
+        } catch (e) {
+            // If it's not valid JSON, we can't do much.
+            console.error("Could not parse 'chords' string to JSON:", song.chords);
+            return `${title}\n${artist}\n\n\`\`\`text\n[ERRO AO LER CIFRA ANTIGA]\n\`\`\``;
+        }
+    }
 
-  return `${title}\n${artist}\n\n\`\`\`text\n${lyricsContent}\n\`\`\``;
+    const lyricsContent = lyrics_array.map(line => {
+        return line.chord ? `[${line.chord}] ${line.lyric}` : line.lyric;
+    }).join('\n');
+
+    return `${title}\n${artist}\n\n\`\`\`text\n${lyricsContent}\n\`\`\``;
 };
 
+
 const Dashboard = () => {
-  // Estados do formulário e da UI
+  // State for form
+  const [title, setTitle] = useState('');
+  const [artist, setArtist] = useState('');
   const [tone, setTone] = useState('');
-  const [markdownContent, setMarkdownContent] = useState('');
+  const [markdownContent, setMarkdownContent] = useState(''); // New state for markdown
+
+  // State for song list and control
   const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingSongId, setEditingSongId] = useState(null);
+
   const navigate = useNavigate();
 
-  // Busca as músicas em tempo real
+  // Fetch songs in real-time
   useEffect(() => {
     const q = query(collection(db, 'songs'), orderBy('title'));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const songsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const songsData = [];
+      querySnapshot.forEach((doc) => {
+        songsData.push({ id: doc.id, ...doc.data() });
+      });
       setSongs(songsData);
       setLoading(false);
     }, (err) => {
@@ -82,40 +116,49 @@ const Dashboard = () => {
     return () => unsubscribe();
   }, []);
 
-  // Reseta o formulário
+  // Reset form and exit edit mode
   const resetForm = () => {
+    setTitle('');
+    setArtist('');
     setTone('');
     setMarkdownContent('');
     setEditingSongId(null);
   };
 
-  // Prepara o formulário para edição
+  // Prepare form for editing
   const handleEdit = (song) => {
     setEditingSongId(song.id);
+    setTitle(song.title);
+    setArtist(song.artist);
     setTone(song.tone);
-    setMarkdownContent(convertSongToMarkdown(song));
+    // Convert the song's lyrics array back to a markdown string
+    const markdown = convertSongToMarkdown(song);
+    setMarkdownContent(markdown);
   };
 
-  // Salva ou atualiza uma música
+  // Save new song or update existing one
   const handleSave = async (e) => {
     e.preventDefault();
-    const parsedData = parseMarkdownToSong(markdownContent);
 
-    if (!parsedData.title || !parsedData.artist || !tone || parsedData.lyrics.length === 0) {
-      alert('Por favor, preencha o Tom, Título, Artista e a Cifra no editor.');
+    // Parse the markdown content
+    const parsedData = parseMarkdownToSong(markdownContent);
+    
+    // Use title/artist from markdown if available, otherwise use the input fields
+    const finalTitle = parsedData.title || title;
+    const finalArtist = parsedData.artist || artist;
+
+    if (!finalTitle || !finalArtist || !tone || parsedData.lyrics.length === 0) {
+      alert('Por favor, preencha o Tom e a Cifra em formato Markdown (com Título e Artista).');
       return;
     }
-
-    const songData = { 
-      title: parsedData.title, 
-      artist: parsedData.artist, 
-      tone, 
-      chords: parsedData.lyrics 
-    };
+    
+    // The 'chords' field in Firestore will store the parsed lyrics array
+    const songData = { title: finalTitle, artist: finalArtist, tone, chords: parsedData.lyrics };
 
     try {
       if (editingSongId) {
-        await updateDoc(doc(db, 'songs', editingSongId), songData);
+        const songDoc = doc(db, 'songs', editingSongId);
+        await updateDoc(songDoc, songData);
       } else {
         await addDoc(collection(db, 'songs'), songData);
       }
@@ -126,7 +169,7 @@ const Dashboard = () => {
     }
   };
 
-  // Exclui uma música
+  // Delete a song
   const handleDelete = async (songId) => {
     if (window.confirm('Tem certeza que deseja excluir esta música?')) {
       try {
@@ -137,7 +180,7 @@ const Dashboard = () => {
       }
     }
   };
-
+  
   // Logout
   const handleLogout = async () => {
     try {
@@ -147,6 +190,15 @@ const Dashboard = () => {
       console.error('Erro ao fazer logout:', error);
     }
   };
+
+  // When editing, populate markdown field if empty from other fields
+  useEffect(() => {
+    if (!markdownContent && title && artist) {
+        const placeholderMarkdown = `# ${title}\n## ${artist}\n\n\`\`\`text\n[Acorde] Letra da música...\n\`\`\``;
+        setMarkdownContent(placeholderMarkdown);
+    }
+  }, [title, artist]);
+
 
   return (
     <div className="bg-gray-900 text-white min-h-screen">
@@ -158,20 +210,45 @@ const Dashboard = () => {
       </header>
       
       <main className="p-8">
+        {/* Form to Add/Edit Song */}
         <div className="max-w-4xl mx-auto mb-10">
           <div className="bg-gray-800 p-8 rounded-lg shadow-lg">
             <h2 className="text-2xl font-bold mb-6">{editingSongId ? 'Editando Música' : 'Adicionar Nova Música'}</h2>
             <form onSubmit={handleSave}>
-              <div className="mb-6">
-                <label htmlFor="tone" className="block text-sm font-medium mb-2">Tom</label>
-                <input type="text" id="tone" value={tone} onChange={(e) => setTone(e.target.value)} className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg" required />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div>
+                  <label htmlFor="title" className="block text-sm font-medium mb-2">Título (Opcional, se no Markdown)</label>
+                  <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg" />
+                </div>
+                <div>
+                  <label htmlFor="artist" className="block text-sm font-medium mb-2">Artista (Opcional, se no Markdown)</label>
+                  <input type="text" id="artist" value={artist} onChange={(e) => setArtist(e.target.value)} className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg" />
+                </div>
+                <div>
+                  <label htmlFor="tone" className="block text-sm font-medium mb-2">Tom</label>
+                  <input type="text" id="tone" value={tone} onChange={(e) => setTone(e.target.value)} className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg" required />
+                </div>
               </div>
               <div className="mb-6">
-                <label className="block text-sm font-medium mb-2">Editor de Cifra</label>
-                <ChordEditor
-                  initialContent={markdownContent}
-                  onContentChange={setMarkdownContent}
-                />
+                <label htmlFor="markdownContent" className="block text-sm font-medium mb-2">Cifra (Formato Markdown)</label>
+                <textarea 
+                  id="markdownContent" 
+                  value={markdownContent} 
+                  onChange={(e) => setMarkdownContent(e.target.value)} 
+                  rows="15" 
+                  className="w-full bg-gray-700 text-white font-mono px-3 py-2 rounded-lg" 
+                  placeholder={
+`# Título da Música
+## Nome do Artista
+
+\`\`\`text
+[Am] Letra da primeira linha
+[C] Letra da segunda linha
+...
+\`\`\``
+                  } 
+                  required
+                ></textarea>
               </div>
               <div className="text-right flex justify-end gap-4">
                 {editingSongId && (
@@ -187,12 +264,16 @@ const Dashboard = () => {
           </div>
         </div>
         
-        <BulkUpload />
+        {/* Bulk Upload Component */}
+        <div className="max-w-4xl mx-auto mb-10">
+            <BulkUpload />
+        </div>
 
-        <div className="max-w-4xl mx-auto mt-10">
+        {/* List of Saved Songs */}
+        <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-6">Músicas Salvas</h2>
           <div className="bg-gray-800 p-8 rounded-lg shadow-lg">
-            {loading && <p>Carregando...</p>}
+             {loading && <p>Carregando músicas...</p>}
             {error && <p className='text-red-500'>{error}</p>}
             {!loading && !error && (
               <div className="overflow-x-auto">
@@ -221,7 +302,7 @@ const Dashboard = () => {
                 </table>
               </div>
             )}
-            {songs.length === 0 && !loading && <p className="text-center mt-4">Nenhuma música cadastrada.</p>}
+             {songs.length === 0 && !loading && <p className="text-center mt-4">Nenhuma música cadastrada ainda.</p>}
           </div>
         </div>
       </main>

@@ -3,9 +3,7 @@ import React, { useState } from 'react';
 import { db } from '../firebase/config';
 import { collection, writeBatch, doc } from 'firebase/firestore';
 
-// ====================================================================================
-// HELPER FUNCTION TO PARSE MARKDOWN
-// ====================================================================================
+// Helper function to parse Markdown into a song object
 const parseMarkdownToSong = (markdown) => {
   const lines = markdown.split('\n');
   let title = '';
@@ -33,13 +31,11 @@ const parseMarkdownToSong = (markdown) => {
       }
     }
   }
-  return { title, artist, tone, chords: lyrics };
+  return { title, artist, tone: tone || '', chords: lyrics }; // Garante que o tom seja ao menos uma string vazia
 };
 
 
-// ====================================================================================
-// COMPONENTE PARA UPLOAD DE MÚSICAS EM LOTE (MARKDOWN)
-// ====================================================================================
+// Component for bulk uploading songs from a Markdown file
 const BulkUpload = () => {
   const [file, setFile] = useState(null);
   const [feedback, setFeedback] = useState({ message: '', type: '' });
@@ -62,14 +58,22 @@ const BulkUpload = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        const content = e.target.result;
-        const songMarkdowns = content.split(/\n---\n/); // Split by '---' on its own line
+        let content = e.target.result;
+
+        // Normalize file content: remove BOM, normalize line endings
+        if (content.charCodeAt(0) === 0xFEFF) {
+          content = content.slice(1);
+        }
+        content = content.replace(/\r\n/g, '\n');
+
+        // Split songs by '---' on its own line, allowing for surrounding whitespace
+        const songMarkdowns = content.split(/^\s*---\s*$/m);
 
         if (songMarkdowns.length === 0 || (songMarkdowns.length === 1 && songMarkdowns[0].trim() === '')) {
           throw new Error("O arquivo parece estar vazio ou não contém o separador '---' entre as músicas.");
         }
 
-        setFeedback({ message: `Encontradas ${songMarkdowns.length} músicas. Processando e enviando para o Firestore...`, type: 'info' });
+        setFeedback({ message: `Encontradas ${songMarkdowns.length} músicas. Processando e enviando...`, type: 'info' });
 
         const batch = writeBatch(db);
         const songsCollection = collection(db, 'songs');
@@ -80,23 +84,28 @@ const BulkUpload = () => {
 
           const song = parseMarkdownToSong(markdown);
           
-          if (song.title && song.artist && song.tone && song.chords.length > 0) {
+          // O campo 'tom' agora é opcional
+          if (song.title && song.artist && song.chords.length > 0) {
             const newSongRef = doc(songsCollection);
             batch.set(newSongRef, song);
             processedCount++;
           } else {
-            console.warn('Música ignorada por formato incompleto (requer título, artista, tom e cifra):', song);
+            console.warn('Música ignorada por formato incompleto (requer título, artista e cifra):', markdown);
           }
         });
 
         if (processedCount === 0) {
-             throw new Error("Nenhuma música válida foi encontrada no arquivo. Verifique o formato.");
+             throw new Error("Nenhuma música válida foi encontrada no arquivo. Verifique se o formato inclui título, artista e a cifra entre \`\`\`text...\`\`\`.");
         }
 
         await batch.commit();
 
         setFeedback({ message: `Sucesso! ${processedCount} de ${songMarkdowns.length} músicas foram enviadas.`, type: 'success' });
-        setFile(null); 
+        // Limpa o input de arquivo para permitir o re-upload do mesmo arquivo
+        if (document.getElementById('bulk-upload-input')) {
+          document.getElementById('bulk-upload-input').value = '';
+        }
+        setFile(null);
 
       } catch (error) {
         console.error("Erro no upload em lote:", error);
@@ -123,21 +132,21 @@ const BulkUpload = () => {
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg mt-10 border border-gray-700">
       <h2 className="text-2xl font-bold mb-4 border-b border-gray-600 pb-2">Upload de Músicas em Lote</h2>
       <div className="mb-4 text-sm text-gray-400 space-y-2">
-        <p>Selecione um arquivo de texto (<code className="bg-gray-900 p-1 rounded">.txt</code> ou <code className="bg-gray-900 p-1 rounded">.md</code>) com uma ou mais cifras.</p>
-        <p>Use <code className="bg-gray-900 p-1 rounded">---</code> (três hifens) em uma linha para separar as músicas.</p>
-        <p>Formato para cada música:</p>
+        <p>Selecione um arquivo (<code className="bg-gray-900 p-1 rounded">.txt</code> ou <code className="bg-gray-900 p-1 rounded">.md</code>) com uma ou mais cifras.</p>
+        <p>Use <code className="bg-gray-900 p-1 rounded">---</code> em uma linha para separar as músicas.</p>
         <pre className="bg-gray-900 p-3 rounded-md text-xs overflow-x-auto">
-          # Título da Música\n## Artista\nTom: C\n\n```text\n[Am] Letra da música...\n```
+          # Título\n## Artista\nTom: C (Opcional)\n\n```text\n[Am] Letra...\n```
         </pre>
       </div>
       
       <div className="flex items-center space-x-4">
         <input 
+          id="bulk-upload-input"
           type="file" 
           accept=".txt,.md,text/plain"
           onChange={handleFileChange}
           disabled={isUploading}
-          className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50" 
+          className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50" 
         />
         <button 
           onClick={handleUpload} 
