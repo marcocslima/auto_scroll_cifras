@@ -25,13 +25,10 @@ const Library = () => {
 
   // Efeito para buscar as músicas do Firestore
   useEffect(() => {
-    // Consulta simplificada sem ordenação no servidor
     const q = query(collection(db, 'songs'));
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         let songsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // Ordenação feita no lado do cliente (no navegador)
         songsData.sort((a, b) => {
           if (a.artist.toLowerCase() < b.artist.toLowerCase()) return -1;
           if (a.artist.toLowerCase() > b.artist.toLowerCase()) return 1;
@@ -39,7 +36,6 @@ const Library = () => {
           if (a.title.toLowerCase() > b.title.toLowerCase()) return 1;
           return 0;
         });
-
         setSongs(songsData);
         setLoading(false);
       },
@@ -79,21 +75,21 @@ const Library = () => {
     ctx.clearRect(0, 0, width, height);
     const upperY = trackingData.thresholds.upper * height;
     const lowerY = trackingData.thresholds.lower * height;
-    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, upperY); ctx.lineTo(width, upperY); ctx.stroke();
-    ctx.strokeStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(0, lowerY); ctx.lineTo(width, lowerY); ctx.stroke();
+    
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, upperY); ctx.lineTo(width, upperY); ctx.stroke();
+    
+    ctx.strokeStyle = '#ef4444';
+    ctx.beginPath(); ctx.moveTo(0, lowerY); ctx.lineTo(width, lowerY); ctx.stroke();
     if (trackingData.nosePosition) {
       const { x, y } = trackingData.nosePosition;
       ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x * width, y * height, 5, 0, 2 * Math.PI); ctx.fill();
     }
   }, [trackingData, isActive, isCameraPreviewVisible]);
 
-
-  // ===============================================
-  // LÓGICA DE FILTRAGEM DE ARTISTAS E MÚSICAS
-  // ===============================================
   const artists = useMemo(() => {
     const artistSet = new Set(songs.map(song => song.artist));
-    return Array.from(artistSet); // Já está ordenado pela busca inicial
+    return Array.from(artistSet);
   }, [songs]);
 
   const filteredArtists = artists.filter(artist => 
@@ -104,34 +100,21 @@ const Library = () => {
     song.artist === selectedArtist
   );
 
-  // Handlers para UI
-  const handleSelectArtist = (artist) => {
-    setSelectedArtist(artist);
-    setSearchTerm(''); // Limpa a busca
-  };
-
-  const handleClearArtist = () => {
-    setSelectedArtist(null);
-  };
-
-  // Handlers para calibração
+  const handleSelectArtist = (artist) => { setSelectedArtist(artist); setSearchTerm(''); };
+  const handleClearArtist = () => { setSelectedArtist(null); };
   const handleSensitivityChange = (e) => { const v = Number(e.target.value); setLocalSensitivity(v); setSensitivity(v); };
   const handleDeadZoneGapChange = (e) => { const v = Number(e.target.value); setLocalDeadZoneGap(v); setDeadZoneGap(v); };
   const handleDeadZoneCenterChange = (e) => { const v = Number(e.target.value); setLocalDeadZoneCenter(v); setDeadZoneCenter(v); };
 
-  // ===============================================
-  // RENDERIZAÇÃO DO COMPONENTE
-  // ===============================================
   return (
-    <div className="bg-gray-900 text-white min-h-screen">
+    <div className="text-white min-h-screen font-sans">
       <div className="container mx-auto p-4 md:p-8">
         <h1 className="text-4xl font-bold mb-4 text-center">Biblioteca de Cifras</h1>
         <p className="text-center text-gray-400 mb-8">Encontre um artista ou calibre a rolagem facial.</p>
 
-        {/* Seção de Calibração (minimizável) */}
         <div className="max-w-2xl mx-auto">
           <details className="bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-4 mb-8">
-            <summary className="cursor-pointer list-none text-center font-semibold text-blue-400 hover:text-blue-300">Calibração da Rolagem Facial</summary>
+            <summary className="cursor-pointer list-none text-center font-semibold text-amber-400 hover:text-amber-300">Calibração da Rolagem Facial</summary>
             <div className="mt-4 pt-4 border-t border-gray-700 space-y-4">
               <button onClick={() => setIsCameraPreviewVisible(p => !p)} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">{isCameraPreviewVisible ? 'Fechar Calibração' : 'Iniciar Calibração'}</button>
               <p className="text-sm text-gray-400 h-5 text-center">{isCameraPreviewVisible ? trackingStatus : "Calibração inativa"}</p>
@@ -141,38 +124,35 @@ const Library = () => {
                   <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full rounded-lg pointer-events-none" />
                 </div>
               </div>
-              <div className="pt-2"><label htmlFor="sensitivity" className="block text-xs text-gray-400 mb-1">Sensibilidade: {localSensitivity}</label><input type="range" id="sensitivity" min="10" max="100" value={localSensitivity} onChange={handleSensitivityChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/></div>
-              <div className="pt-2"><label htmlFor="deadZoneGap" className="block text-xs text-gray-400 mb-1">Tamanho da Zona Morta: {Math.round(localDeadZoneGap * 100)}%</label><input type="range" id="deadZoneGap" min="0.05" max="0.4" step="0.01" value={localDeadZoneGap} onChange={handleDeadZoneGapChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/></div>
-              <div className="pt-2"><label htmlFor="deadZoneCenter" className="block text-xs text-gray-400 mb-1">Posição Vertical: {Math.round(localDeadZoneCenter * 100)}%</label><input type="range" id="deadZoneCenter" min="0.3" max="0.7" step="0.01" value={localDeadZoneCenter} onChange={handleDeadZoneCenterChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"/></div>
+              <div className="pt-2"><label htmlFor="sensitivity" className="block text-xs text-gray-400 mb-1">Sensibilidade: {localSensitivity}</label><input type="range" id="sensitivity" min="10" max="100" value={localSensitivity} onChange={handleSensitivityChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500"/></div>
+              <div className="pt-2"><label htmlFor="deadZoneGap" className="block text-xs text-gray-400 mb-1">Tamanho da Zona Morta: {Math.round(localDeadZoneGap * 100)}%</label><input type="range" id="deadZoneGap" min="0.05" max="0.4" step="0.01" value={localDeadZoneGap} onChange={handleDeadZoneGapChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500"/></div>
+              <div className="pt-2"><label htmlFor="deadZoneCenter" className="block text-xs text-gray-400 mb-1">Posição Vertical: {Math.round(localDeadZoneCenter * 100)}%</label><input type="range" id="deadZoneCenter" min="0.3" max="0.7" step="0.01" value={localDeadZoneCenter} onChange={handleDeadZoneCenterChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500"/></div>
             </div>
           </details>
         </div>
 
-        {/* Seção de Busca e Listagem */}
         <div className="bg-gray-800 shadow-lg rounded-lg p-6 max-w-2xl mx-auto">
           {loading && <p className="text-center">Carregando biblioteca...</p>}
           {error && <p className="text-center text-red-500">{error}</p>}
           {!loading && !error && (
             <div>
-              {/* Se um artista foi selecionado, mostra as músicas dele */}
               {selectedArtist ? (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold text-blue-400">{selectedArtist}</h2>
+                    <h2 className="text-2xl font-bold text-amber-400">{selectedArtist}</h2>
                     <button onClick={handleClearArtist} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">← Voltar aos artistas</button>
                   </div>
                   <ul className="divide-y divide-gray-700">
                     {songsBySelectedArtist.map(song => (
                       <li key={song.id} className="py-3">
                         <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
-                          <h3 className="text-xl font-semibold">{song.title}</h3>
+                          <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
                         </Link>
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : (
-                /* Caso contrário, mostra a busca por artista */
                 <div>
                   <h2 className="text-2xl font-bold mb-4 text-center">Buscar por Artista</h2>
                   <input 
@@ -180,13 +160,13 @@ const Library = () => {
                     placeholder="Digite o nome do artista..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-900 text-white p-3 rounded-lg mb-4 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-900 text-white p-3 rounded-lg mb-4 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                   <ul className="divide-y divide-gray-700 max-h-96 overflow-y-auto">
                     {filteredArtists.length > 0 ? (
                       filteredArtists.map(artist => (
                         <li key={artist} onClick={() => handleSelectArtist(artist)} className="py-3 px-3 cursor-pointer hover:bg-gray-700 rounded-lg transition-colors">
-                          <span className="text-lg">{artist}</span>
+                          <span className="text-lg text-gray-200 hover:text-amber-400">{artist}</span>
                         </li>
                       ))
                     ) : (

@@ -29,7 +29,6 @@ const Song = () => {
 
   const { start, stop, isScrollEnabled, trackingStatus } = useSettings();
 
-  // Efeito para buscar a música no Firestore
   useEffect(() => {
     const fetchSong = async () => {
       setLoading(true);
@@ -44,14 +43,11 @@ const Song = () => {
       setLoading(false);
     };
     fetchSong();
-    return () => stop(); // Desliga a câmera ao sair da página
+    return () => stop();
   }, [id, stop]);
 
-  // Efeito para controlar a visibilidade do botão "Voltar ao Topo"
   useEffect(() => {
-    const handleScroll = () => {
-      setShowBackToTop(window.scrollY > 200);
-    };
+    const handleScroll = () => { setShowBackToTop(window.scrollY > 200); };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -62,7 +58,7 @@ const Song = () => {
   };
 
   const handleGoBack = () => {
-    stop(); // Garante que a câmera seja desligada
+    stop();
     navigate('/');
   };
 
@@ -70,15 +66,15 @@ const Song = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (loading) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
-  if (error) return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">{error}</div>;
+  if (loading) return <div className="text-white min-h-screen flex items-center justify-center">Carregando...</div>;
+  if (error) return <div className="text-white min-h-screen flex items-center justify-center">{error}</div>;
   if (!song) return null;
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen font-sans">
+    <div className="text-white min-h-screen font-sans">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
         <header className="mb-6 text-center">
-          <button onClick={handleGoBack} className="text-blue-400 hover:text-blue-300 mb-4 inline-block">
+          <button onClick={handleGoBack} className="text-amber-400 hover:text-amber-300 mb-4 inline-block">
              ← Voltar para a Biblioteca
            </button>
           <h1 className="text-4xl md:text-5xl font-bold break-words">{song.title}</h1>
@@ -91,7 +87,7 @@ const Song = () => {
           {song.chords && song.chords.length > 0 ? (
             song.chords.map((line, index) => (
                 <div key={index} className="flex items-baseline mb-3">
-                    <div className="w-20 flex-shrink-0"><span className="font-bold text-blue-400">{line.chord}</span></div>
+                    <div className="w-20 flex-shrink-0"><span className="font-bold text-amber-400">{line.chord}</span></div>
                     <div className="flex-grow pl-4"><span className="whitespace-pre-wrap">{line.lyric}</span></div>
                 </div>
             ))
@@ -101,19 +97,16 @@ const Song = () => {
         </main>
       </div>
 
-      {/* Botões Flutuantes */}
       <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
-        {/* Botão de Ativar/Desativar Rolagem */}
         <button 
           onClick={handleToggleFaceScroll} 
-          className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isScrollEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+          className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isScrollEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
             {isScrollEnabled ? (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"></path></svg>
             ) : (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"></path></svg>
             )}
         </button>
-        {/* Botão de Voltar ao Topo */}
         {showBackToTop && (
           <button 
             onClick={scrollToTop} 
