@@ -12,6 +12,7 @@ const Library = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [songSearchTerm, setSongSearchTerm] = useState('');
   const [selectedArtist, setSelectedArtist] = useState(null);
 
   // Estados e Funções de Calibração (do useSettings)
@@ -97,11 +98,12 @@ const Library = () => {
   );
 
   const songsBySelectedArtist = songs.filter(song => 
-    song.artist === selectedArtist
+    song.artist === selectedArtist &&
+    song.title.toLowerCase().includes(songSearchTerm.toLowerCase())
   );
 
   const handleSelectArtist = (artist) => { setSelectedArtist(artist); setSearchTerm(''); };
-  const handleClearArtist = () => { setSelectedArtist(null); };
+  const handleClearArtist = () => { setSelectedArtist(null); setSongSearchTerm('') };
   const handleSensitivityChange = (e) => { const v = Number(e.target.value); setLocalSensitivity(v); setSensitivity(v); };
   const handleDeadZoneGapChange = (e) => { const v = Number(e.target.value); setLocalDeadZoneGap(v); setDeadZoneGap(v); };
   const handleDeadZoneCenterChange = (e) => { const v = Number(e.target.value); setLocalDeadZoneCenter(v); setDeadZoneCenter(v); };
@@ -142,14 +144,25 @@ const Library = () => {
                     <h2 className="text-2xl font-bold text-amber-400">{selectedArtist}</h2>
                     <button onClick={handleClearArtist} className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">← Voltar aos artistas</button>
                   </div>
+                  <input 
+                    type="text"
+                    placeholder="Digite o nome da música..."
+                    value={songSearchTerm}
+                    onChange={(e) => setSongSearchTerm(e.target.value)}
+                    className="w-full bg-gray-900 text-white p-3 rounded-lg mb-4 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
                   <ul className="divide-y divide-gray-700">
-                    {songsBySelectedArtist.map(song => (
-                      <li key={song.id} className="py-3">
-                        <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
-                          <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
-                        </Link>
-                      </li>
-                    ))}
+                    {songsBySelectedArtist.length > 0 ? (
+                      songsBySelectedArtist.map(song => (
+                        <li key={song.id} className="py-3">
+                          <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
+                            <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
+                          </Link>
+                        </li>
+                      ))
+                    ) : (
+                      <p className="text-center text-gray-400 py-4">Nenhuma música encontrada.</p>
+                    )}
                   </ul>
                 </div>
               ) : (

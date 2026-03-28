@@ -5,6 +5,7 @@ import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
 
+// Função auxiliar para garantir que os acordes sejam sempre um array
 const getChordsArray = (chordsData) => {
   if (Array.isArray(chordsData)) return chordsData;
   if (typeof chordsData === 'string') {
@@ -26,9 +27,11 @@ const Song = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState({});
 
   const { start, stop, pause, resume, isScrollEnabled, trackingStatus } = useSettings();
 
+  // Busca os dados da música no Firestore
   useEffect(() => {
     const fetchSong = async () => {
       setLoading(true);
@@ -46,47 +49,62 @@ const Song = () => {
     return () => stop();
   }, [id, stop]);
 
-  const sections = useMemo(() => {
+  // Pré-processa os acordes para agrupar por seção
+  const processedSections = useMemo(() => {
     if (!song || !song.chords) return [];
-    let sectionCounter = 0;
-    return song.chords
-      .filter(line => line.section)
-      .map((sec) => {
-        const sectionId = `section-${sectionCounter++}`;
-        return { ...sec, sectionId };
-      });
+
+    const sections = [];
+    let currentSection = { title: 'Início', lines: [] };
+
+    song.chords.forEach((line, index) => {
+      if (line.section) {
+        // Salva a seção anterior se ela tiver linhas
+        if (currentSection.lines.length > 0 || currentSection.title !== 'Início') {
+          sections.push(currentSection);
+        }
+        // Inicia uma nova seção
+        currentSection = { title: line.section, lines: [], isTab: line.section.toLowerCase().startsWith('tab') };
+      } else {
+        currentSection.lines.push({ ...line, id: `line-${index}` });
+      }
+    });
+    // Adiciona a última seção processada
+    sections.push(currentSection);
+
+    // Inicializa o estado de colapso para todas as seções de tablatura
+    const initialCollapsedState = {};
+    sections.forEach((sec, index) => {
+      if (sec.isTab) {
+        initialCollapsedState[index] = true; // Começa recolhido
+      }
+    });
+    setCollapsedSections(initialCollapsedState);
+
+    return sections;
   }, [song]);
 
-  const handleScrollAndPause = (scrollAction) => {
-    if (!isScrollEnabled) {
-      scrollAction();
-      return;
-    }
+  const toggleSection = (index) => {
+    setCollapsedSections(prev => ({ ...prev, [index]: !prev[index] }));
+  };
 
+  // ... (Restante das funções de navegação e scroll permanecem iguais)
+  const handleScrollAndPause = (scrollAction) => {
+    if (!isScrollEnabled) { scrollAction(); return; }
     pause();
     scrollAction();
-
-    // Usa um timeout para garantir que a rolagem tenha começado antes de resumir
-    setTimeout(() => {
-      resume();
-    }, 1000); // 1 segundo é um tempo seguro para a maioria das animações de rolagem
+    setTimeout(() => { resume(); }, 1000);
   };
 
   const scrollToSection = (sectionId) => {
     handleScrollAndPause(() => {
       const element = document.getElementById(sectionId);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     });
   };
 
   const scrollToTop = () => {
-    handleScrollAndPause(() => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
+    handleScrollAndPause(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); });
   };
-
 
   useEffect(() => {
     const handleScroll = () => { setShowBackToTop(window.scrollY > 200); };
@@ -113,50 +131,45 @@ const Song = () => {
         </header>
 
         <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-loose font-mono overflow-x-auto">
-          {song.chords && song.chords.length > 0 ? (
-            song.chords.map((line, index) => {
-              if (line.section) {
-                 let cumulativeIndex = 0;
-                 for (let i = 0; i < index; i++) {
-                   if (song.chords[i].section) {
-                     cumulativeIndex++;
-                   }
-                 }
-                return (
-                  <h2 key={`section-title-${index}`} id={`section-${cumulativeIndex}`} className="font-sans text-xl font-bold text-amber-300 mt-8 mb-4 pt-2 border-t border-gray-700">
-                    {line.section}
-                  </h2>
-                );
-              }
-              return (
-                <div key={index} className="flex items-baseline mb-3">
-                  <div className="w-20 flex-shrink-0"><span className="font-bold text-amber-400">{line.chord}</span></div>
-                  <div className="flex-grow pl-4"><span className="whitespace-pre-wrap">{line.lyric}</span></div>
-                </div>
-              );
-            })
+          {processedSections.length > 0 ? (
+            processedSections.map((section, index) => (
+              <div key={`section-${index}`}>
+                <h2 
+                  id={`section-${index}`}
+                  onClick={() => section.isTab && toggleSection(index)}
+                  className={`font-sans text-xl font-bold text-amber-300 mt-8 mb-4 pt-2 border-t border-gray-700 ${section.isTab ? 'cursor-pointer' : ''}`}
+                >
+                  {section.title}
+                  {section.isTab && <span className="text-sm font-normal text-gray-400 ml-3">{collapsedSections[index] ? '(clique para expandir)' : '(clique para recolher)'}</span>}
+                </h2>
+                {(!section.isTab || !collapsedSections[index]) && section.lines.map(line => (
+                  <div key={line.id} className="flex items-baseline mb-3">
+                    <div className="w-20 flex-shrink-0"><span className="font-bold text-amber-400">{line.chord}</span></div>
+                    <div className="flex-grow pl-4"><span className="whitespace-pre-wrap">{line.lyric}</span></div>
+                  </div>
+                ))}
+              </div>
+            ))
           ) : (
             <p className="text-gray-400">Nenhuma cifra disponível para esta música.</p>
           )}
         </main>
       </div>
       
-      {/* Floating Section Navigation */}
-      {sections.length > 0 && (
-        <div className="fixed top-1/2 -translate-y-1/2 right-6 flex flex-col gap-3 z-40"> {/* Lower z-index to avoid overlap */}
-          {sections.map((sec, index) => (
+      {/* Botões flutuantes (navegação de seção, scroll, etc) */}
+      {/* ... (O código dos botões flutuantes permanece o mesmo) ... */}
+       <div className="fixed top-1/2 -translate-y-1/2 right-6 flex flex-col gap-3 z-40">
+        {processedSections.filter(sec => sec.title !== 'Início').map((sec, index) => (
             <button 
               key={index} 
-              onClick={() => scrollToSection(sec.sectionId)} 
-              title={sec.section} // Tooltip for accessibility
+              onClick={() => scrollToSection(`section-${index}`)} 
+              title={sec.title}
               className="bg-gray-700 hover:bg-gray-600 text-white font-bold text-xl rounded-full shadow-lg w-14 h-14 flex items-center justify-center transition-all duration-200 transform hover:scale-110">
-              {sec.section.charAt(0).toUpperCase()}
+              {sec.title.charAt(0).toUpperCase()}
             </button>
           ))}
         </div>
-      )}
 
-      {/* Other Floating Buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
         <button onClick={handleToggleFaceScroll} className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isScrollEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"></path></svg>
