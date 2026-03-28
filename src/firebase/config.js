@@ -3,38 +3,40 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
+// Your web app's Firebase configuration
+// The values are read from environment variables for security
 const firebaseConfig = {
-  apiKey: "AIzaSyA8idPjUMLgXIa_jEccTBoNgMCaqyeD9os",
-  authDomain: "autoscrollcifras.firebaseapp.com",
-  projectId: "autoscrollcifras",
-  storageBucket: "autoscrollcifras.firebasestorage.app",
-  messagingSenderId: "687618882909",
-  appId: "1:687618882909:web:9ab80e74bd72107a613cb4"
+  apiKey: import.meta.env.VITE_API_KEY,
+  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_APP_ID
 };
 
-// Inicializa o app do Firebase
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exporta as instâncias de Auth e Firestore para serem usadas após a inicialização
+// Export Auth and Firestore instances for use after initialization
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 /**
- * Função de inicialização assíncrona.
- * Ativa a persistência offline e retorna uma promessa que resolve quando tudo está pronto.
- * Isso deve ser chamado no ponto de entrada do aplicativo (main.jsx) ANTES de renderizar o app.
+ * Asynchronous initialization function.
+ * Enables offline persistence and returns a promise that resolves when everything is ready.
+ * This should be called at the application's entry point (main.jsx) BEFORE rendering the app.
  */
 export const initializeOfflinePersistence = () => {
   return enableIndexedDbPersistence(db)
     .then(() => {
-      console.log("Persistência offline ativada com sucesso.");
+      console.log("Offline persistence enabled successfully.");
     })
     .catch((err) => {
       if (err.code === 'failed-precondition') {
-        console.warn("Firestore (info): A persistência não foi ativada, múltiplas abas abertas?");
+        console.warn("Firestore (info): Persistence could not be enabled, multiple tabs open?");
       } else if (err.code === 'unimplemented') {
-        console.warn("Firestore (aviso): O navegador não suporta persistência offline.");
+        console.warn("Firestore (warning): The browser does not support offline persistence.");
       }
-      return Promise.resolve(); // Continua a execução do app mesmo se a persistência falhar
+      return Promise.resolve(); // Continue app execution even if persistence fails
     });
 };
