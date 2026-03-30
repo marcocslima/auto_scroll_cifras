@@ -2,37 +2,7 @@
 import React, { useState } from 'react';
 import { db } from '../firebase/config';
 import { collection, writeBatch, doc } from 'firebase/firestore';
-
-// Helper function to parse Markdown into a song object
-const parseMarkdownToSong = (markdown) => {
-  const lines = markdown.split('\n');
-  let title = '';
-  let artist = '';
-  let tone = '';
-  const lyrics = [];
-  let isInsideLyricsBlock = false;
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('# ')) {
-      title = trimmedLine.substring(2).trim();
-    } else if (trimmedLine.startsWith('## ')) {
-      artist = trimmedLine.substring(3).trim();
-    } else if (trimmedLine.toLowerCase().startsWith('tom:')) {
-      tone = trimmedLine.substring(4).trim();
-    } else if (trimmedLine === '```text') {
-      isInsideLyricsBlock = true;
-    } else if (trimmedLine === '```') {
-      isInsideLyricsBlock = false;
-    } else if (isInsideLyricsBlock) {
-      const match = line.match(/^\s*(?:\[(.*?)\])?\s*(.*)/);
-      if (match) {
-        lyrics.push({ chord: match[1] || '', lyric: match[2] || '' });
-      }
-    }
-  }
-  return { title, artist, tone: tone || '', chords: lyrics }; // Garante que o tom seja ao menos uma string vazia
-};
+import { parseMarkdownToSong } from '../utils/markdownParser';
 
 
 // Component for bulk uploading songs from a Markdown file
