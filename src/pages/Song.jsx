@@ -7,17 +7,108 @@ import { useSettings } from '../context/SettingsContext';
 
 // Função auxiliar para garantir que os acordes sejam sempre um array
 const getChordsArray = (chordsData) => {
-  if (Array.isArray(chordsData)) return chordsData;
+  if (Array.isArray(chordsData)) {
+    // Converte formato antigo { chord: 'Am', lyric: '...' } para novo { chords: [...], lyric: '...' }
+    return chordsData.map(item => {
+      if (item.chords) return item; // Já no formato novo
+      // Formato antigo: converte
+      if (item.chord) {
+        return { chords: [{ chord: item.chord, position: 0 }], lyric: item.lyric || '' };
+      }
+      return { chords: [], lyric: item.lyric || '' };
+    });
+  }
   if (typeof chordsData === 'string') {
     try {
       const parsed = JSON.parse(chordsData);
-      return Array.isArray(parsed) ? (Array.isArray(parsed[0]) ? parsed.flat() : parsed) : [];
+      return Array.isArray(parsed) ? getChordsArray(parsed) : [];
     } catch (e) { 
       console.error("Erro ao parsear acordes:", e); 
       return []; 
     }
   }
   return [];
+};
+
+// Componente que renderiza uma linha de cifra com acordes posicionados
+const ChordLyricLine = ({ line }) => {
+  const hasChords = line.chords && line.chords.length > 0;
+  
+  // Se é um par acorde+letra (cifra-style com \n separando)
+  if (line.isChordLyricPair && hasChords) {
+    const parts = line.lyric.split('\n');
+    const chordLineText = parts[0] || '';
+    const lyricLineText = parts.length > 1 ? parts[1] : '';
+    
+    return (
+      <div className="mb-1">
+        <div className="text-amber-400 font-bold whitespace-pre" style={{ minHeight: '1.5em' }}>
+          {chordLineText}
+        </div>
+        {lyricLineText && (
+          <div className="whitespace-pre">
+            {lyricLineText}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Se tem acordes inline (formato [Chord]) - renderiza com acordes acima
+  if (hasChords && line.lyric) {
+    // Constrói a linha de acordes com base nas posições
+    const lyric = line.lyric;
+    let chordDisplay = '';
+    
+    // Ordena por posição
+    const sortedChords = [...line.chords].sort((a, b) => a.position - b.position);
+    
+    sortedChords.forEach(c => {
+      while (chordDisplay.length < c.position) chordDisplay += ' ';
+      chordDisplay += c.chord;
+    });
+
+    return (
+      <div className="mb-1">
+        <div className="text-amber-400 font-bold whitespace-pre" style={{ minHeight: '1.5em' }}>
+          {chordDisplay}
+        </div>
+        <div className="whitespace-pre">
+          {lyric}
+        </div>
+      </div>
+    );
+  }
+
+  // Linha só de acordes (sem letra associada), como "Intro: G" ou linha solta de acordes
+  if (hasChords && !line.lyric) {
+    let chordDisplay = '';
+    const sortedChords = [...line.chords].sort((a, b) => a.position - b.position);
+    sortedChords.forEach(c => {
+      while (chordDisplay.length < c.position) chordDisplay += ' ';
+      chordDisplay += c.chord;
+    });
+
+    return (
+      <div className="mb-1">
+        <div className="text-amber-400 font-bold whitespace-pre">
+          {chordDisplay}
+        </div>
+      </div>
+    );
+  }
+
+  // Linha vazia
+  if (!line.lyric && !hasChords) {
+    return <div className="mb-1" style={{ minHeight: '1.5em' }}>&nbsp;</div>;
+  }
+
+  // Linha de letra pura (sem acordes)
+  return (
+    <div className="mb-1">
+      <div className="whitespace-pre">{line.lyric}</div>
+    </div>
+  );
 };
 
 const Song = () => {
@@ -130,7 +221,7 @@ const Song = () => {
           <p className="text-sm text-gray-400 h-5 mt-4">{isScrollEnabled ? trackingStatus : "Rolagem facial inativa"}</p>
         </header>
 
-        <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-loose font-mono overflow-x-auto">
+        <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-relaxed font-mono overflow-x-auto">
           {processedSections.length > 0 ? (
             processedSections.map((section, index) => (
               <div key={`section-${index}`}>
@@ -143,10 +234,7 @@ const Song = () => {
                   {section.isTab && <span className="text-sm font-normal text-gray-400 ml-3">{collapsedSections[index] ? '(clique para expandir)' : '(clique para recolher)'}</span>}
                 </h2>
                 {(!section.isTab || !collapsedSections[index]) && section.lines.map(line => (
-                  <div key={line.id} className="flex items-baseline mb-3">
-                    <div className="w-20 flex-shrink-0"><span className="font-bold text-amber-400">{line.chord}</span></div>
-                    <div className="flex-grow pl-4"><span className="whitespace-pre-wrap">{line.lyric}</span></div>
-                  </div>
+                  <ChordLyricLine key={line.id} line={line} />
                 ))}
               </div>
             ))
@@ -157,7 +245,6 @@ const Song = () => {
       </div>
       
       {/* Botões flutuantes (navegação de seção, scroll, etc) */}
-      {/* ... (O código dos botões flutuantes permanece o mesmo) ... */}
        <div className="fixed top-1/2 -translate-y-1/2 right-6 flex flex-col gap-3 z-40">
         {processedSections.filter(sec => sec.title !== 'Início').map((sec, index) => (
             <button 
