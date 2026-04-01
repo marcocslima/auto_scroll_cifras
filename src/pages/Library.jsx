@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
@@ -14,6 +14,7 @@ const Library = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [songSearchTerm, setSongSearchTerm] = useState('');
   const [selectedArtist, setSelectedArtist] = useState(null);
+  const location = useLocation();
 
   // Estados e Funções de Calibração (do useSettings)
   const { start, stop, isActive, trackingStatus, videoStream, setSensitivity, setDeadZoneGap, setDeadZoneCenter, trackingData, initialDeadZoneGap, initialDeadZoneCenter } = useSettings();
@@ -48,6 +49,20 @@ const Library = () => {
     );
     return () => unsubscribe();
   }, []);
+
+  // Efeito para lidar com o artista vindo da URL
+  useEffect(() => {
+    if (songs.length > 0) {
+      const params = new URLSearchParams(location.search);
+      const artistFromUrl = params.get('artist');
+      if (artistFromUrl) {
+        const artistExists = songs.some(song => song.artist === artistFromUrl);
+        if (artistExists) {
+          setSelectedArtist(artistFromUrl);
+        }
+      }
+    }
+  }, [songs, location.search]);
 
   // Limpeza da câmera ao sair da página
   useEffect(() => {
