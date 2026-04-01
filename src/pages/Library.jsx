@@ -1,9 +1,40 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
+
+// Função para extrair a primeira linha de letra, ignorando linhas de acordes
+const getFirstLyricLine = (chords) => {
+  if (!Array.isArray(chords)) return null;
+
+  for (const line of chords) {
+    // Ignora linhas que são de seção ou não têm conteúdo
+    if (!line || !line.lyric || line.section) {
+      continue;
+    }
+
+    const text = line.lyric.trim();
+    if (text === '') continue;
+
+    // Heurística para identificar se a linha contém letra
+    const words = text.split(/\s+/);
+    const isLyricLine = words.some(word => 
+      word.length >= 2 && 
+      word.toLowerCase() === word && 
+      !/[0-9:\[\]()\-\/#!$%^&*;{}=\-_`~]/.test(word)
+    );
+
+    if (isLyricLine) {
+      // Limpa a linha, removendo os acordes entre colchetes e espaços extras.
+      const cleanedText = text.replace(/\[.*?\]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (cleanedText) return cleanedText;
+    }
+  }
+
+  return null; // Retorna nulo se nenhuma linha de letra for encontrada
+};
+
 
 // Componente da Biblioteca de Cifras
 const Library = () => {
@@ -168,13 +199,17 @@ const Library = () => {
                   />
                   <ul className="divide-y divide-gray-700">
                     {songsBySelectedArtist.length > 0 ? (
-                      songsBySelectedArtist.map(song => (
-                        <li key={song.id} className="py-3">
-                          <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
-                            <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
-                          </Link>
-                        </li>
-                      ))
+                      songsBySelectedArtist.map(song => {
+                        const firstLyric = getFirstLyricLine(song.chords);
+                        return (
+                          <li key={song.id} className="py-3">
+                            <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
+                              <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
+                              {firstLyric && <p className="text-sm text-gray-400 mt-1 truncate">{firstLyric}</p>}
+                            </Link>
+                          </li>
+                        );
+                      })
                     ) : (
                       <p className="text-center text-gray-400 py-4">Nenhuma música encontrada.</p>
                     )}
