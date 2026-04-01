@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
@@ -204,7 +204,15 @@ const Song = () => {
   }, []);
 
   const handleToggleFaceScroll = () => { if (isScrollEnabled) stop(); else start({ scroll: true }); };
-  const handleGoBack = () => { stop(); navigate('/'); };
+  
+  const handleGoBack = () => {
+    stop();
+    if (song && song.artist) {
+      navigate(`/?artist=${encodeURIComponent(song.artist)}`);
+    } else {
+      navigate('/');
+    }
+  };
 
   if (loading) return <div className="text-white min-h-screen flex items-center justify-center">Carregando...</div>;
   if (error) return <div className="text-white min-h-screen flex items-center justify-center">{error}</div>;
@@ -214,7 +222,15 @@ const Song = () => {
     <div className="text-white min-h-screen font-sans">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
         <header className="mb-6 text-center">
-          <button onClick={handleGoBack} className="text-amber-400 hover:text-amber-300 mb-4 inline-block">← Voltar para a Biblioteca</button>
+            <div className="flex justify-center items-center gap-4 mb-4">
+                <button onClick={handleGoBack} className="text-amber-400 hover:text-amber-300 inline-block">
+                    {song.artist ? `← Voltar para ${song.artist}` : '← Voltar para a Biblioteca'}
+                </button>
+                <span className="text-gray-500">|</span>
+                <Link to="/" onClick={() => stop()} className="text-amber-400 hover:text-amber-300 inline-block">
+                    Página Inicial
+                </Link>
+            </div>
           <h1 className="text-4xl md:text-5xl font-bold break-words">{song.title}</h1>
           <p className="text-xl md:text-2xl text-gray-400 mt-2">{song.artist}</p>
           <p className="text-md text-gray-500 mt-1">Tom: {song.tone || 'Não especificado'}</p>
