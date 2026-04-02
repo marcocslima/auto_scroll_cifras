@@ -4,51 +4,6 @@ import { db } from '../firebase/config';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
 
-// Função para extrair a primeira linha de letra, removendo os acordes.
-const getFirstLyricLine = (chords) => {
-  if (!Array.isArray(chords)) return null;
-
-  for (const line of chords) {
-    // Ignora linhas que são de seção (ex: [Intro]) ou que não têm conteúdo.
-    if (!line || !line.lyric || line.section) {
-      continue;
-    }
-
-    const text = line.lyric.trim();
-    if (text === '') continue;
-
-    // Heurística para identificar se a linha contém letra, e não apenas acordes.
-    // Procura por pelo menos uma palavra que seja totalmente minúscula.
-    const containsLyrics = text.split(' ').some(word => 
-      word.trim() !== '' && word.toLowerCase() === word
-    );
-
-    if (containsLyrics) {
-      // Regex para remover acordes. É projetada para ser específica e evitar a remoção de palavras reais da letra.
-      // Primeira Passada: Remove acordes mais complexos e óbvios (ex: Cmaj7, Gsus4, Am, B7).
-      // Procura por uma nota (A-G), seguida por indicadores de acordes como 'm', 'maj', 'dim', '7', etc.
-      const complexChordRegex = /\b[A-G][#b]?(?:m|maj|min|dim|aug|sus|add|M|°|7|9|11|13|6)\w*\b/g;
-      let cleanedText = text.replace(complexChordRegex, '');
-
-      // Segunda Passada: Remove acordes simples (ex: C, D, F, G, B).
-      // Acordes de uma letra como 'A' e 'E' são evitados aqui para não remover as palavras "a" e "e" em português.
-      const simpleChordRegex = /\b([BCDFG][#b]?)\b/g;
-      cleanedText = cleanedText.replace(simpleChordRegex, '');
-
-      // Limpeza Final: remove espaços múltiplos que podem ter sido deixados para trás e apara as bordas.
-      cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
-      
-      // Se, após a limpeza, a linha ainda tiver conteúdo, retorne-a.
-      if (cleanedText) {
-        return cleanedText;
-      }
-    }
-  }
-
-  return null; // Retorna nulo se nenhuma linha de letra válida for encontrada.
-};
-
-
 // Componente da Biblioteca de Cifras
 const Library = () => {
   // Estados da Biblioteca
@@ -212,17 +167,16 @@ const Library = () => {
                   />
                   <ul className="divide-y divide-gray-700">
                     {songsBySelectedArtist.length > 0 ? (
-                      songsBySelectedArtist.map(song => {
-                        const firstLyric = getFirstLyricLine(song.chords);
-                        return (
+                      songsBySelectedArtist.map(song => (
                           <li key={song.id} className="py-3">
                             <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
                               <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
-                              {firstLyric && <p className="text-sm text-gray-400 mt-1 truncate">{firstLyric}</p>}
+                              {/* Use song.firstLyricLine directly and only render if it exists */}
+                              {song.firstLyricLine && <p className="text-sm text-gray-400 mt-1 truncate">{song.firstLyricLine}</p>}
                             </Link>
                           </li>
-                        );
-                      })
+                        )
+                      )
                     ) : (
                       <p className="text-center text-gray-400 py-4">Nenhuma música encontrada.</p>
                     )}
