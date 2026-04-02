@@ -4,12 +4,12 @@ import { db } from '../firebase/config';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
 
-// Função para extrair a primeira linha de letra, ignorando linhas de acordes
+// Função para extrair a primeira linha de letra, removendo os acordes.
 const getFirstLyricLine = (chords) => {
   if (!Array.isArray(chords)) return null;
 
   for (const line of chords) {
-    // Ignora linhas que são de seção ou não têm conteúdo
+    // Ignora linhas que são de seção (ex: [Intro]) ou que não têm conteúdo.
     if (!line || !line.lyric || line.section) {
       continue;
     }
@@ -17,22 +17,35 @@ const getFirstLyricLine = (chords) => {
     const text = line.lyric.trim();
     if (text === '') continue;
 
-    // Heurística para identificar se a linha contém letra
-    const words = text.split(/\s+/);
-    const isLyricLine = words.some(word => 
-      word.length >= 2 && 
-      word.toLowerCase() === word && 
-      !/[0-9:\[\]()\-\/#!$%^&*;{}=\-_`~]/.test(word)
+    // Heurística para identificar se a linha contém letra, e não apenas acordes.
+    // Procura por pelo menos uma palavra que seja totalmente minúscula.
+    const containsLyrics = text.split(' ').some(word => 
+      word.trim() !== '' && word.toLowerCase() === word
     );
 
-    if (isLyricLine) {
-      // Limpa a linha, removendo os acordes entre colchetes e espaços extras.
-      const cleanedText = text.replace(/\[.*?\]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (cleanedText) return cleanedText;
+    if (containsLyrics) {
+      // Regex para remover acordes. É projetada para ser específica e evitar a remoção de palavras reais da letra.
+      // Primeira Passada: Remove acordes mais complexos e óbvios (ex: Cmaj7, Gsus4, Am, B7).
+      // Procura por uma nota (A-G), seguida por indicadores de acordes como 'm', 'maj', 'dim', '7', etc.
+      const complexChordRegex = /\b[A-G][#b]?(?:m|maj|min|dim|aug|sus|add|M|°|7|9|11|13|6)\w*\b/g;
+      let cleanedText = text.replace(complexChordRegex, '');
+
+      // Segunda Passada: Remove acordes simples (ex: C, D, F, G, B).
+      // Acordes de uma letra como 'A' e 'E' são evitados aqui para não remover as palavras "a" e "e" em português.
+      const simpleChordRegex = /\b([BCDFG][#b]?)\b/g;
+      cleanedText = cleanedText.replace(simpleChordRegex, '');
+
+      // Limpeza Final: remove espaços múltiplos que podem ter sido deixados para trás e apara as bordas.
+      cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+      
+      // Se, após a limpeza, a linha ainda tiver conteúdo, retorne-a.
+      if (cleanedText) {
+        return cleanedText;
+      }
     }
   }
 
-  return null; // Retorna nulo se nenhuma linha de letra for encontrada
+  return null; // Retorna nulo se nenhuma linha de letra válida for encontrada.
 };
 
 
