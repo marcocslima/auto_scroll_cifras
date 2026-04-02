@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { db } from '../firebase/config';
@@ -169,12 +168,15 @@ const Library = () => {
                   <ul className="divide-y divide-gray-700">
                     {songsBySelectedArtist.length > 0 ? (
                       songsBySelectedArtist.map(song => (
-                        <li key={song.id} className="py-3">
-                          <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
-                            <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
-                          </Link>
-                        </li>
-                      ))
+                          <li key={song.id} className="py-3">
+                            <Link to={`/song/${song.id}`} className="block hover:bg-gray-700 p-3 rounded-lg transition-colors">
+                              <h3 className="text-xl font-semibold text-gray-200 hover:text-amber-400">{song.title}</h3>
+                              {/* Use song.firstLyricLine directly and only render if it exists */}
+                              {song.firstLyricLine && <p className="text-sm text-gray-400 mt-1 truncate">{song.firstLyricLine}</p>}
+                            </Link>
+                          </li>
+                        )
+                      )
                     ) : (
                       <p className="text-center text-gray-400 py-4">Nenhuma música encontrada.</p>
                     )}

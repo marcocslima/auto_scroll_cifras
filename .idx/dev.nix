@@ -1,43 +1,42 @@
+{ pkgs, ... }:
+{
+  # To learn more about how to use Nix to configure your environment
+  # see: https://developers.google.com/idx/guides/customize-idx-env
 
-# To learn more about how to use Nix to configure your environment
-# see: https://developers.google.com/idx/guides/customize-idx-env
-{ pkgs, ... }: {
   # Which nixpkgs channel to use.
   channel = "stable-24.05"; # or "unstable"
+
   # Use https://search.nixos.org/packages to find packages
   packages = [
-    # Switching to a compatible Node.js version for Vite
-    pkgs.nodejs_20,
-    pkgs.python311Packages.firebase-admin # Adicionado para o script de upload
+    pkgs.nodejs_20
+    pkgs.python3
+    pkgs.pip
   ];
+
   # Sets environment variables in the workspace
   env = {};
   idx = {
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
       "google.gemini-cli-vscode-companion"
+      # Recommended extension for Python development
+      "ms-python.python"
     ];
+
     # Enable previews
     previews = {
       enable = true;
-      previews = {
-        web = {
-          command = ["npm" "run" "dev" "--" "--port" "$PORT"];
-          manager = "web";
-        };
-      };
     };
+
     # Workspace lifecycle hooks
     workspace = {
       # Runs when a workspace is first created
+      # This is the ideal place to install dependencies
       onCreate = {
-        npm-install = "npm install";
+        pip-install = "pip install -r requirements.txt";
       };
-      # Runs when the workspace is (re)started
-      onStart = {
-        # Example: start a background task to watch and re-build backend code
-        # watch-backend = "npm run watch-backend";
-      };
+      # Runs every time the workspace is (re)started
+      onStart = {};
     };
   };
 }
