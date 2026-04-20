@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
+import { useLrcScroll } from '../hooks/useLrcScroll'; // Importe o novo hook
 
 // Função auxiliar para garantir que os acordes sejam sempre um array
 const getChordsArray = (chordsData) => {
@@ -30,86 +31,25 @@ const getChordsArray = (chordsData) => {
   return [];
 };
 
+
 // Componente que renderiza uma linha de cifra com acordes posicionados
-const ChordLyricLine = ({ line }) => {
-  const hasChords = line.chords && line.chords.length > 0;
-  
-  // Se é um par acorde+letra (cifra-style com \n separando)
-  if (line.isChordLyricPair && hasChords) {
-    const parts = line.lyric.split('\n');
-    const chordLineText = parts[0] || '';
-    const lyricLineText = parts.length > 1 ? parts[1] : '';
-    
-    return (
-      <div className="mb-1">
-        <div className="text-amber-400 font-bold whitespace-pre" style={{ minHeight: '1.5em' }}>
-          {chordLineText}
-        </div>
-        {lyricLineText && (
-          <div className="whitespace-pre">
-            {lyricLineText}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Se tem acordes inline (formato [Chord]) - renderiza com acordes acima
-  if (hasChords && line.lyric) {
-    // Constrói a linha de acordes com base nas posições
-    const lyric = line.lyric;
-    let chordDisplay = '';
-    
-    // Ordena por posição
-    const sortedChords = [...line.chords].sort((a, b) => a.position - b.position);
-    
-    sortedChords.forEach(c => {
-      while (chordDisplay.length < c.position) chordDisplay += ' ';
-      chordDisplay += c.chord;
-    });
+const ChordLyricLine = ({ line, lineId }) => {
+    const hasChords = line.chords && line.chords.length > 0;
 
     return (
-      <div className="mb-1">
-        <div className="text-amber-400 font-bold whitespace-pre" style={{ minHeight: '1.5em' }}>
-          {chordDisplay}
+        <div id={lineId} className="mb-1 relative"> 
+            {hasChords && (
+                <div className="text-amber-400 font-bold whitespace-pre-wrap" style={{ minHeight: '1.5em' }}>
+                    {line.chords.map(c => c.chord).join(' ')}
+                </div>
+            )}
+            <div className="whitespace-pre-wrap">
+                {line.lyric || (hasChords ? '' : '\u00A0')}
+            </div>
         </div>
-        <div className="whitespace-pre">
-          {lyric}
-        </div>
-      </div>
     );
-  }
-
-  // Linha só de acordes (sem letra associada), como "Intro: G" ou linha solta de acordes
-  if (hasChords && !line.lyric) {
-    let chordDisplay = '';
-    const sortedChords = [...line.chords].sort((a, b) => a.position - b.position);
-    sortedChords.forEach(c => {
-      while (chordDisplay.length < c.position) chordDisplay += ' ';
-      chordDisplay += c.chord;
-    });
-
-    return (
-      <div className="mb-1">
-        <div className="text-amber-400 font-bold whitespace-pre">
-          {chordDisplay}
-        </div>
-      </div>
-    );
-  }
-
-  // Linha vazia
-  if (!line.lyric && !hasChords) {
-    return <div className="mb-1" style={{ minHeight: '1.5em' }}>&nbsp;</div>;
-  }
-
-  // Linha de letra pura (sem acordes)
-  return (
-    <div className="mb-1">
-      <div className="whitespace-pre">{line.lyric}</div>
-    </div>
-  );
 };
+
 
 const Song = () => {
   const { id } = useParams();
@@ -119,8 +59,16 @@ const Song = () => {
   const [error, setError] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState({});
+  const [isLrcMode, setIsLrcMode] = useState(false); // Estado para o modo LRC
 
   const { start, stop, pause, resume, isScrollEnabled, trackingStatus } = useSettings();
+  
+  // Instancia o hook de scroll LRC
+  const { start: startLrcScroll } = useLrcScroll({
+    lrc: song?.syncedLyrics || '',
+    chords: song?.chords || '',
+    isPlaying: isLrcMode, // Ativa o scroll quando o modo LRC está ligado
+  });
 
   // Busca os dados da música no Firestore
   useEffect(() => {
@@ -131,7 +79,14 @@ const Song = () => {
         const songSnapshot = await getDoc(songDocRef);
         if (songSnapshot.exists()) {
           const songData = songSnapshot.data();
-          setSong({ id: songSnapshot.id, ...songData, chords: getChordsArray(songData.chords) });
+          // Transforma a cifra em string única para o hook
+          const chordsString = getChordsArray(songData.chords).map(l => l.lyric || '').join('\n');
+          setSong({ 
+              id: songSnapshot.id, 
+              ...songData, 
+              chords: chordsString, // Armazena a cifra como string
+              originalChords: getChordsArray(songData.chords) // Mantém o formato original para renderização
+          });
         } else { setError('Música não encontrada.'); }
       } catch (err) { setError('Falha ao carregar a música.'); }
       setLoading(false);
@@ -142,31 +97,27 @@ const Song = () => {
 
   // Pré-processa os acordes para agrupar por seção
   const processedSections = useMemo(() => {
-    if (!song || !song.chords) return [];
+    if (!song || !song.originalChords) return [];
 
     const sections = [];
     let currentSection = { title: 'Início', lines: [] };
 
-    song.chords.forEach((line, index) => {
+    song.originalChords.forEach((line, index) => {
       if (line.section) {
-        // Salva a seção anterior se ela tiver linhas
         if (currentSection.lines.length > 0 || currentSection.title !== 'Início') {
           sections.push(currentSection);
         }
-        // Inicia uma nova seção
         currentSection = { title: line.section, lines: [], isTab: line.section.toLowerCase().startsWith('tab') };
       } else {
         currentSection.lines.push({ ...line, id: `line-${index}` });
       }
     });
-    // Adiciona a última seção processada
     sections.push(currentSection);
 
-    // Inicializa o estado de colapso para todas as seções de tablatura
     const initialCollapsedState = {};
     sections.forEach((sec, index) => {
       if (sec.isTab) {
-        initialCollapsedState[index] = true; // Começa recolhido
+        initialCollapsedState[index] = true;
       }
     });
     setCollapsedSections(initialCollapsedState);
@@ -178,7 +129,6 @@ const Song = () => {
     setCollapsedSections(prev => ({ ...prev, [index]: !prev[index] }));
   };
 
-  // ... (Restante das funções de navegação e scroll permanecem iguais)
   const handleScrollAndPause = (scrollAction) => {
     if (!isScrollEnabled) { scrollAction(); return; }
     pause();
@@ -203,10 +153,23 @@ const Song = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleToggleFaceScroll = () => { if (isScrollEnabled) stop(); else start({ scroll: true }); };
+  const handleToggleFaceScroll = () => { 
+      if (isLrcMode) setIsLrcMode(false);
+      if (isScrollEnabled) stop(); else start({ scroll: true }); 
+  };
+
+  const handleToggleLrcMode = () => {
+      if (isScrollEnabled) stop();
+      const newLrcMode = !isLrcMode;
+      setIsLrcMode(newLrcMode);
+      if (newLrcMode) {
+        startLrcScroll();
+      }
+  };
   
   const handleGoBack = () => {
     stop();
+    setIsLrcMode(false); // Desativa o LRC ao voltar
     if (song && song.artist) {
       navigate(`/?artist=${encodeURIComponent(song.artist)}`);
     } else {
@@ -227,30 +190,32 @@ const Song = () => {
                     {song.artist ? `← Voltar para ${song.artist}` : '← Voltar para a Biblioteca'}
                 </button>
                 <span className="text-gray-500">|</span>
-                <Link to="/" onClick={() => stop()} className="text-amber-400 hover:text-amber-300 inline-block">
+                <Link to="/" onClick={() => { stop(); setIsLrcMode(false); }} className="text-amber-400 hover:text-amber-300 inline-block">
                     Página Inicial
                 </Link>
             </div>
           <h1 className="text-4xl md:text-5xl font-bold break-words">{song.title}</h1>
           <p className="text-xl md:text-2xl text-gray-400 mt-2">{song.artist}</p>
           <p className="text-md text-gray-500 mt-1">Tom: {song.tone || 'Não especificado'}</p>
-          <p className="text-sm text-gray-400 h-5 mt-4">{isScrollEnabled ? trackingStatus : "Rolagem facial inativa"}</p>
+          <p className="text-sm text-gray-400 h-5 mt-4">
+             {isLrcMode ? "Rolagem LRC ativa" : (isScrollEnabled ? trackingStatus : "Rolagem facial inativa")}
+          </p>
         </header>
 
         <main className="bg-gray-800 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg text-lg leading-relaxed font-mono overflow-x-auto">
           {processedSections.length > 0 ? (
-            processedSections.map((section, index) => (
-              <div key={`section-${index}`}>
+            processedSections.map((section, sectionIndex) => (
+              <div key={`section-${sectionIndex}`}>
                 <h2 
-                  id={`section-${index}`}
-                  onClick={() => section.isTab && toggleSection(index)}
+                  id={`section-${sectionIndex}`}
+                  onClick={() => section.isTab && toggleSection(sectionIndex)}
                   className={`font-sans text-xl font-bold text-amber-300 mt-8 mb-4 pt-2 border-t border-gray-700 ${section.isTab ? 'cursor-pointer' : ''}`}
                 >
                   {section.title}
-                  {section.isTab && <span className="text-sm font-normal text-gray-400 ml-3">{collapsedSections[index] ? '(clique para expandir)' : '(clique para recolher)'}</span>}
+                  {section.isTab && <span className="text-sm font-normal text-gray-400 ml-3">{collapsedSections[sectionIndex] ? '(expandir)' : '(recolher)'}</span>}
                 </h2>
-                {(!section.isTab || !collapsedSections[index]) && section.lines.map(line => (
-                  <ChordLyricLine key={line.id} line={line} />
+                {(!section.isTab || !collapsedSections[sectionIndex]) && section.lines.map((line, lineIndex) => (
+                  <ChordLyricLine key={line.id} line={line} lineId={line.id} />
                 ))}
               </div>
             ))
@@ -260,7 +225,6 @@ const Song = () => {
         </main>
       </div>
       
-      {/* Botões flutuantes (navegação de seção, scroll, etc) */}
        <div className="fixed top-1/2 -translate-y-1/2 right-6 flex flex-col gap-3 z-40">
         {processedSections.filter(sec => sec.title !== 'Início').map((sec, index) => (
             <button 
@@ -274,6 +238,13 @@ const Song = () => {
         </div>
 
       <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
+          {/* Botão para modo LRC */}
+          {song.syncedLyrics && (
+             <button onClick={handleToggleLrcMode} className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isLrcMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'}`}>
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"></path><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd"></path></svg>
+             </button>
+          )}
+
         <button onClick={handleToggleFaceScroll} className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isScrollEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"></path></svg>
         </button>

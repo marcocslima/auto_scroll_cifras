@@ -11,6 +11,8 @@
     pkgs.nodejs_20
     pkgs.python3
     pkgs.pip
+    pkgs.python3Packages.requests # Adicionado para fazer chamadas de API em Python
+    pkgs.python3Packages.firebase-admin # Adicionado para interagir com o Firebase
   ];
 
   # Sets environment variables in the workspace
@@ -19,24 +21,17 @@
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
       "google.gemini-cli-vscode-companion"
-      # Recommended extension for Python development
-      "ms-python.python"
     ];
-
-    # Enable previews
-    previews = {
-      enable = true;
-    };
-
-    # Workspace lifecycle hooks
     workspace = {
       # Runs when a workspace is first created
-      # This is the ideal place to install dependencies
       onCreate = {
+        npm-install = "npm install";
         pip-install = "pip install -r requirements.txt";
       };
-      # Runs every time the workspace is (re)started
-      onStart = {};
+      # Runs on workspace start
+      onStart = {
+        # "npm start" = "npm start";
+      };
     };
   };
 }
