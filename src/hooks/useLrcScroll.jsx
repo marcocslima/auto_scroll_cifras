@@ -1,22 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { parseLRC } from '../utils/lrcParser';
 
-/**
- * Hook customizado para scroll automático de cifras com base em letras LRC.
- *
- * @param {string} lrc A letra da música no formato LRC.
- * @param {string} chords A cifra da música.
- * @param {boolean} isPlaying Flag que indica se a música está tocando.
- * @param {number} [offset=3000] O tempo de espera inicial em milissegundos.
- */
 export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
   const [lrcLines, setLrcLines] = useState([]);
   const [chordLines, setChordLines] = useState([]);
   const [currentLine, setCurrentLine] = useState(-1);
+  const [activeLineIndex, setActiveLineIndex] = useState(-1); // <<< NOVO: Índice da linha destacada
   const startTimeRef = useRef(null);
   const timeoutRef = useRef(null);
-  const initialScrollDone = useRef(false); 
-
+  const initialScrollDone = useRef(false);
 
   useEffect(() => {
     setLrcLines(parseLRC(lrc));
@@ -33,6 +25,7 @@ export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
       requestAnimationFrame(update);
     } else {
       clearTimeout(timeoutRef.current);
+      setActiveLineIndex(-1); // <<< NOVO: Limpa o destaque quando não está tocando
       if (startTimeRef.current) {
         startTimeRef.current = null;
       }
@@ -61,6 +54,7 @@ export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
       if (nextLine > -1) {
         const lrcText = lrcLines[nextLine].text.toLowerCase();
         const targetLineIndex = findClosestChordLine(lrcText, nextLine);
+        setActiveLineIndex(targetLineIndex); // <<< NOVO: Define qual linha destacar
 
         if (targetLineIndex !== -1) {
           const element = document.getElementById(`line-${targetLineIndex}`);
@@ -68,6 +62,8 @@ export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }
+      } else {
+        setActiveLineIndex(-1); // <<< NOVO: Limpa se estiver antes da primeira linha
       }
     }
 
@@ -99,12 +95,10 @@ export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
     for (let i = 0; i < chordLines.length; i++) {
       const chordLineText = chordLines[i].toLowerCase();
       if (chordLineText.includes(lrcText)) {
-        // Prioriza a primeira ocorrência exata
         return i;
       }       
     }
     
-    // Fallback: se não encontrar correspondência exata, retorna a linha da cifra mais próxima da linha do LRC.
     const approximateIndex = Math.floor(lrcIndex / lrcLines.length * chordLines.length);
     return Math.min(approximateIndex, chordLines.length - 1);
   };
@@ -113,8 +107,10 @@ export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
     if (lrcLines.length > 0) {
       initialScrollDone.current = false; 
       setCurrentLine(-1);
+      setActiveLineIndex(-1); // <<< NOVO: Limpa o destaque ao iniciar
     }
   };
 
-  return { start };
+  // Retorna o índice da linha ativa
+  return { start, activeLineIndex };
 };

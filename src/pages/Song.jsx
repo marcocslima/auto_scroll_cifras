@@ -4,15 +4,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { useSettings } from '../context/SettingsContext';
-import { useLrcScroll } from '../hooks/useLrcScroll'; // Importe o novo hook
+import { useLrcScroll } from '../hooks/useLrcScroll';
 
-// Função auxiliar para garantir que os acordes sejam sempre um array
 const getChordsArray = (chordsData) => {
   if (Array.isArray(chordsData)) {
-    // Converte formato antigo { chord: 'Am', lyric: '...' } para novo { chords: [...], lyric: '...' }
     return chordsData.map(item => {
-      if (item.chords) return item; // Já no formato novo
-      // Formato antigo: converte
+      if (item.chords) return item;
       if (item.chord) {
         return { chords: [{ chord: item.chord, position: 0 }], lyric: item.lyric || '' };
       }
@@ -23,21 +20,20 @@ const getChordsArray = (chordsData) => {
     try {
       const parsed = JSON.parse(chordsData);
       return Array.isArray(parsed) ? getChordsArray(parsed) : [];
-    } catch (e) { 
-      console.error("Erro ao parsear acordes:", e); 
-      return []; 
+    } catch (e) {
+      console.error("Erro ao parsear acordes:", e);
+      return [];
     }
   }
   return [];
 };
 
-
-// Componente que renderiza uma linha de cifra com acordes posicionados
-const ChordLyricLine = ({ line, lineId }) => {
+const ChordLyricLine = ({ line, lineId, isHighlighted }) => { // <<< NOVO: prop isHighlighted
     const hasChords = line.chords && line.chords.length > 0;
+    const highlightClass = isHighlighted ? 'text-yellow-300' : ''; // <<< NOVO: Classe para destaque
 
     return (
-        <div id={lineId} className="mb-1 relative"> 
+        <div id={lineId} className={`mb-1 relative transition-colors duration-300 ${highlightClass}`}> 
             {hasChords && (
                 <div className="text-amber-400 font-bold whitespace-pre-wrap" style={{ minHeight: '1.5em' }}>
                     {line.chords.map(c => c.chord).join(' ')}
@@ -50,7 +46,6 @@ const ChordLyricLine = ({ line, lineId }) => {
     );
 };
 
-
 const Song = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -59,18 +54,16 @@ const Song = () => {
   const [error, setError] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState({});
-  const [isLrcMode, setIsLrcMode] = useState(false); // Estado para o modo LRC
+  const [isLrcMode, setIsLrcMode] = useState(false);
 
   const { start, stop, pause, resume, isScrollEnabled, trackingStatus } = useSettings();
   
-  // Instancia o hook de scroll LRC
-  const { start: startLrcScroll } = useLrcScroll({
+  const { start: startLrcScroll, activeLineIndex } = useLrcScroll({ // <<< NOVO: Pega o activeLineIndex
     lrc: song?.syncedLyrics || '',
     chords: song?.chords || '',
-    isPlaying: isLrcMode, // Ativa o scroll quando o modo LRC está ligado
+    isPlaying: isLrcMode,
   });
 
-  // Busca os dados da música no Firestore
   useEffect(() => {
     const fetchSong = async () => {
       setLoading(true);
@@ -79,13 +72,12 @@ const Song = () => {
         const songSnapshot = await getDoc(songDocRef);
         if (songSnapshot.exists()) {
           const songData = songSnapshot.data();
-          // Transforma a cifra em string única para o hook
           const chordsString = getChordsArray(songData.chords).map(l => l.lyric || '').join('\n');
           setSong({ 
               id: songSnapshot.id, 
               ...songData, 
-              chords: chordsString, // Armazena a cifra como string
-              originalChords: getChordsArray(songData.chords) // Mantém o formato original para renderização
+              chords: chordsString,
+              originalChords: getChordsArray(songData.chords)
           });
         } else { setError('Música não encontrada.'); }
       } catch (err) { setError('Falha ao carregar a música.'); }
@@ -95,21 +87,22 @@ const Song = () => {
     return () => stop();
   }, [id, stop]);
 
-  // Pré-processa os acordes para agrupar por seção
   const processedSections = useMemo(() => {
     if (!song || !song.originalChords) return [];
 
     const sections = [];
     let currentSection = { title: 'Início', lines: [] };
+    let lineCounter = 0; // <<< NOVO: Contador para o índice global da linha
 
-    song.originalChords.forEach((line, index) => {
+    song.originalChords.forEach((line) => {
       if (line.section) {
         if (currentSection.lines.length > 0 || currentSection.title !== 'Início') {
           sections.push(currentSection);
         }
         currentSection = { title: line.section, lines: [], isTab: line.section.toLowerCase().startsWith('tab') };
       } else {
-        currentSection.lines.push({ ...line, id: `line-${index}` });
+        currentSection.lines.push({ ...line, globalIndex: lineCounter, id: `line-${lineCounter}` }); // <<< NOVO: Adiciona globalIndex
+        lineCounter++;
       }
     });
     sections.push(currentSection);
@@ -169,7 +162,7 @@ const Song = () => {
   
   const handleGoBack = () => {
     stop();
-    setIsLrcMode(false); // Desativa o LRC ao voltar
+    setIsLrcMode(false);
     if (song && song.artist) {
       navigate(`/?artist=${encodeURIComponent(song.artist)}`);
     } else {
@@ -214,8 +207,13 @@ const Song = () => {
                   {section.title}
                   {section.isTab && <span className="text-sm font-normal text-gray-400 ml-3">{collapsedSections[sectionIndex] ? '(expandir)' : '(recolher)'}</span>}
                 </h2>
-                {(!section.isTab || !collapsedSections[sectionIndex]) && section.lines.map((line, lineIndex) => (
-                  <ChordLyricLine key={line.id} line={line} lineId={line.id} />
+                {(!section.isTab || !collapsedSections[sectionIndex]) && section.lines.map(line => (
+                  <ChordLyricLine 
+                    key={line.id} 
+                    line={line} 
+                    lineId={line.id} 
+                    isHighlighted={line.globalIndex === activeLineIndex} // <<< NOVO: Passa a prop de destaque
+                  />
                 ))}
               </div>
             ))
@@ -238,7 +236,6 @@ const Song = () => {
         </div>
 
       <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
-          {/* Botão para modo LRC */}
           {song.syncedLyrics && (
              <button onClick={handleToggleLrcMode} className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isLrcMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'}`}>
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"></path><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd"></path></svg>
