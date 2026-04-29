@@ -1,116 +1,150 @@
-import { useState, useEffect, useRef } from 'react';
-import { parseLRC } from '../utils/lrcParser';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatMsToTimer, parseLRC, parseLrcMapping } from '../utils/lrcParser';
 
-export const useLrcScroll = ({ lrc, chords, isPlaying, offset = 3000 }) => {
-  const [lrcLines, setLrcLines] = useState([]);
-  const [chordLines, setChordLines] = useState([]);
-  const [currentLine, setCurrentLine] = useState(-1);
-  const [activeLineIndex, setActiveLineIndex] = useState(-1); // <<< NOVO: Índice da linha destacada
+export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) => {
+  const parsedLrc = useMemo(() => parseLRC(lrcText), [lrcText]);
+  const parsedMapping = useMemo(() => parseLrcMapping(lrcMapping), [lrcMapping]);
+
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [activeLineIndex, setActiveLineIndex] = useState(-1);
+  const [lastAppliedMappingIndex, setLastAppliedMappingIndex] = useState(-1);
+
   const startTimeRef = useRef(null);
-  const timeoutRef = useRef(null);
-  const initialScrollDone = useRef(false);
+  const elapsedBeforeStartRef = useRef(0);
+  const animationRef = useRef(null);
+  const lastAppliedIndexRef = useRef(-1);
+
+  const stopAnimation = useCallback(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  }, []);
+
+  const applyMappingByElapsedTime = useCallback((timeInMs) => {
+    if (!parsedMapping.length || !resolveTargetByMapping) return;
+
+    let nextIndex = -1;
+    for (let index = 0; index < parsedMapping.length; index += 1) {
+      if (timeInMs >= parsedMapping[index].timeMs) nextIndex = index;
+      else break;
+    }
+
+    if (nextIndex === lastAppliedIndexRef.current) return;
+
+    if (nextIndex === -1) {
+      lastAppliedIndexRef.current = -1;
+      setLastAppliedMappingIndex(-1);
+      setActiveLineIndex(-1);
+      return;
+    }
+
+    const mappingItem = parsedMapping[nextIndex];
+    const target = resolveTargetByMapping(mappingItem);
+
+    if (!target) {
+      lastAppliedIndexRef.current = nextIndex;
+      setLastAppliedMappingIndex(nextIndex);
+      return;
+    }
+
+    if (target.type === 'line') setActiveLineIndex(target.lineIndex);
+    else setActiveLineIndex(-1);
+
+    if (target.elementId) {
+      const element = document.getElementById(target.elementId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: target.type === 'section' ? 'start' : 'center' });
+      }
+    }
+
+    lastAppliedIndexRef.current = nextIndex;
+    setLastAppliedMappingIndex(nextIndex);
+  }, [parsedMapping, resolveTargetByMapping]);
+
+  const play = useCallback(() => {
+    if (!isEnabled || isRunning) return;
+
+    startTimeRef.current = performance.now() - elapsedBeforeStartRef.current;
+    setIsRunning(true);
+  }, [isEnabled, isRunning]);
+
+  const pause = useCallback(() => {
+    if (!isRunning) return;
+
+    setIsRunning(false);
+    stopAnimation();
+
+    if (startTimeRef.current !== null) {
+      elapsedBeforeStartRef.current = performance.now() - startTimeRef.current;
+      setElapsedMs(elapsedBeforeStartRef.current);
+    }
+  }, [isRunning, stopAnimation]);
+
+  const reset = useCallback(() => {
+    setIsRunning(false);
+    stopAnimation();
+
+    startTimeRef.current = null;
+    elapsedBeforeStartRef.current = 0;
+    lastAppliedIndexRef.current = -1;
+
+    setElapsedMs(0);
+    setActiveLineIndex(-1);
+    setLastAppliedMappingIndex(-1);
+  }, [stopAnimation]);
+
+  const enable = useCallback(() => {
+    setIsEnabled(true);
+    reset();
+  }, [reset]);
+
+  const disable = useCallback(() => {
+    setIsEnabled(false);
+    reset();
+  }, [reset]);
 
   useEffect(() => {
-    setLrcLines(parseLRC(lrc));
-    setChordLines(chords.split('\n').map(line => line.trim()));
-  }, [lrc, chords]);
+    if (!isRunning || !isEnabled) return undefined;
+
+    const step = (now) => {
+      if (startTimeRef.current === null) {
+        startTimeRef.current = now - elapsedBeforeStartRef.current;
+      }
+
+      const nextElapsed = now - startTimeRef.current;
+      setElapsedMs(nextElapsed);
+      applyMappingByElapsedTime(nextElapsed);
+      animationRef.current = requestAnimationFrame(step);
+    };
+
+    animationRef.current = requestAnimationFrame(step);
+
+    return () => stopAnimation();
+  }, [isRunning, isEnabled, applyMappingByElapsedTime, stopAnimation]);
 
   useEffect(() => {
-    if (isPlaying && lrcLines.length > 0) {
-      startTimeRef.current = performance.now() - (currentLine >= 0 ? lrcLines[currentLine].time * 1000 : -offset);
-      if (!initialScrollDone.current) {
-        scrollToFirstLine();
-        initialScrollDone.current = true;
-      }
-      requestAnimationFrame(update);
-    } else {
-      clearTimeout(timeoutRef.current);
-      setActiveLineIndex(-1); // <<< NOVO: Limpa o destaque quando não está tocando
-      if (startTimeRef.current) {
-        startTimeRef.current = null;
-      }
-    }
+    if (!isEnabled || !parsedMapping.length) return;
+    applyMappingByElapsedTime(elapsedMs);
+  }, [isEnabled, parsedMapping, elapsedMs, applyMappingByElapsedTime]);
 
-    return () => clearTimeout(timeoutRef.current);
-  }, [isPlaying, lrcLines]);
+  useEffect(() => () => stopAnimation(), [stopAnimation]);
 
-  const update = () => {
-    if (!isPlaying) return;
-
-    const elapsedTime = performance.now() - startTimeRef.current;
-    const currentLrcTime = elapsedTime / 1000;
-
-    let nextLine = -1;
-    for (let i = 0; i < lrcLines.length; i++) {
-      if (currentLrcTime >= lrcLines[i].time) {
-        nextLine = i;
-      } else {
-        break;
-      }
-    }
-
-    if (nextLine !== currentLine) {
-      setCurrentLine(nextLine);
-      if (nextLine > -1) {
-        const lrcText = lrcLines[nextLine].text.toLowerCase();
-        const targetLineIndex = findClosestChordLine(lrcText, nextLine);
-        setActiveLineIndex(targetLineIndex); // <<< NOVO: Define qual linha destacar
-
-        if (targetLineIndex !== -1) {
-          const element = document.getElementById(`line-${targetLineIndex}`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-      } else {
-        setActiveLineIndex(-1); // <<< NOVO: Limpa se estiver antes da primeira linha
-      }
-    }
-
-    if (isPlaying) {
-      requestAnimationFrame(update);
-    }
+  return {
+    isEnabled,
+    isRunning,
+    elapsedMs,
+    elapsedLabel: formatMsToTimer(elapsedMs),
+    activeLineIndex,
+    parsedLrc,
+    parsedMapping,
+    lastAppliedMappingIndex,
+    enable,
+    disable,
+    play,
+    pause,
+    reset,
   };
-
-  const scrollToFirstLine = () => {
-    if (lrcLines.length > 0) {
-      timeoutRef.current = setTimeout(() => {
-        const firstLrcText = lrcLines[0].text.toLowerCase();
-        const firstLineIndex = findClosestChordLine(firstLrcText, 0);
-        if (firstLineIndex !== -1) {
-          const element = document.getElementById(`line-${firstLineIndex}`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-      }, offset);
-    }
-  };
-
-  const findClosestChordLine = (lrcText, lrcIndex) => {
-    if (!lrcText) return -1;
-
-    let bestMatch = { index: -1, score: 0 };
-
-    for (let i = 0; i < chordLines.length; i++) {
-      const chordLineText = chordLines[i].toLowerCase();
-      if (chordLineText.includes(lrcText)) {
-        return i;
-      }       
-    }
-    
-    const approximateIndex = Math.floor(lrcIndex / lrcLines.length * chordLines.length);
-    return Math.min(approximateIndex, chordLines.length - 1);
-  };
-
-  const start = () => {
-    if (lrcLines.length > 0) {
-      initialScrollDone.current = false; 
-      setCurrentLine(-1);
-      setActiveLineIndex(-1); // <<< NOVO: Limpa o destaque ao iniciar
-    }
-  };
-
-  // Retorna o índice da linha ativa
-  return { start, activeLineIndex };
 };

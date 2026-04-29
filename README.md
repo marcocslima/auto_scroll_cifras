@@ -1,16 +1,62 @@
-# React + Vite
+# Auto Scroll Cifras
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicativo web para leitura de cifras com rolagem automática por **face tracking** e por **sincronização LRC**.
 
-Currently, two official plugins are available:
+## Estrutura principal
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- `src/pages/Library.jsx`: biblioteca e calibração da rolagem facial.
+- `src/pages/Song.jsx`: tela de execução da cifra (face scroll + LRC scroll).
+- `src/hooks/useFaceScroll.jsx`: lógica de detecção facial e rolagem por movimento.
+- `src/hooks/useLrcScroll.jsx`: cronômetro e rolagem sincronizada via `lrcMapping`.
+- `src/utils/lrcParser.js`: parser de LRC e parser de mapeamento temporal.
+- `src/pages/admin/Dashboard.jsx`: CRUD de músicas no Firebase.
 
-## React Compiler
+## Modelo de dados no Firebase (coleção `songs`)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Campos principais:
 
-## Expanding the ESLint configuration
+- `title` (string)
+- `artist` (string)
+- `tone` (string)
+- `chords` (array estruturado da cifra)
+- `syncedLyrics` (string no formato LRC)
+- `lrcMapping` (objeto JSON com mapeamento de tempo → destino da cifra)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Formato esperado de `lrcMapping`
+
+Exemplo:
+
+```json
+{
+  "00:45.00": "linha10",
+  "01:30.50": "linha25",
+  "02:10.00": "refrao",
+  "02:42.20": "section-3"
+}
+```
+
+#### Regras aceitas
+
+- **Chave**: timestamp em formato `mm:ss`, `mm:ss.cc` ou `mm:ss.mmm`.
+- **Valor (linha)**:
+  - `linha10` (1-based)
+  - `line-9` (0-based, id técnico)
+  - `10` (equivalente a `linha10`)
+- **Valor (seção)**:
+  - nome da seção (ex.: `refrao`, `verso 2`, `ponte`)
+  - id técnico `section-<indice>`
+
+## Fluxo do modo LRC
+
+1. Usuário ativa o toggle **LRC** na tela da cifra.
+2. Usuário controla o cronômetro manualmente (`Play`, `Pause`, `Reset`).
+3. Conforme o tempo avança, o app procura o último timestamp atingido em `lrcMapping`.
+4. O scroll é posicionado automaticamente para a **linha** ou **seção** mapeada.
+5. O scroll manual continua permitido durante toda a execução.
+
+## Desenvolvimento
+
+```bash
+npm install
+npm run dev
+```

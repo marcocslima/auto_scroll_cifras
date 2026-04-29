@@ -29,35 +29,14 @@ def get_lyrics_from_api(artist, title):
     """Busca a letra de uma música na API lyrics.ovh."""
     try:
         url = f"https://api.lyrics.ovh/v1/{artist}/{title}"
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=10) # Timeout de 10 segundos
         if response.status_code == 200:
             data = response.json()
             return data.get('lyrics', '')
         else:
             return None
     except requests.RequestException as e:
-        print(f"  - Erro na API (lyrics.ovh) para '{title}': {e}")
-        return None
-
-# --- NOVA FUNÇÃO ---
-def get_synced_lyrics_from_lrclib(artist, title):
-    """Busca a letra sincronizada (LRC) de uma música na API lrclib.net."""
-    try:
-        url = "https://lrclib.net/api/get"
-        params = {'artist_name': artist, 'track_name': title}
-        # A API pode retornar 404 se não encontrar, o que é um resultado esperado.
-        resp = requests.get(url, params=params, timeout=15)
-        if resp.status_code == 200:
-            data = resp.json()
-            # A API retorna um objeto vazio se não encontrar nada, então verificamos os campos
-            if data and data.get('syncedLyrics'):
-                return data['syncedLyrics']
-            else:
-                return None
-        else:
-            return None
-    except requests.RequestException as e:
-        print(f"  - Erro na API (lrclib.net) para '{title}': {e}")
+        print(f"  - Erro na API para \'{title}\': {e}")
         return None
 
 def get_first_line(lyrics):
@@ -92,39 +71,26 @@ def main():
 
         print(f"\n({i+1}/{total_songs}) Processando: '{title}' por '{artist}'")
 
-        # --- Bloco para Letras Normais (já existente) ---
-        if 'lyrics' not in song_data or not song_data['lyrics']:
-            print("  - Procurando letra normal...")
-            lyrics = get_lyrics_from_api(artist, title)
-            if lyrics:
-                first_line = get_first_line(lyrics)
-                print(f"  - Letra normal encontrada! Primeira linha: \"{first_line}\"")
-                songs_ref.document(song_id).update({
-                    'lyrics': lyrics,
-                    'firstLyricLine': first_line
-                })
-                print(f"  - Firestore atualizado (letra normal) para ID: {song_id}")
-            else:
-                print("  - Letra normal não encontrada na API.")
+        # Pula se a letra já existir para não fazer chamadas desnecessárias
+        if 'lyrics' in song_data and song_data['lyrics']:
+            print("  - Letra já existe. Pulando.")
+            continue
+
+        lyrics = get_lyrics_from_api(artist, title)
+
+        if lyrics:
+            first_line = get_first_line(lyrics)
+            print(f"  - Letra encontrada! Primeira linha: \"{first_line}\"")
+            
+            # Atualiza o documento no Firestore com a letra e a primeira linha
+            songs_ref.document(song_id).update({
+                'lyrics': lyrics,
+                'firstLyricLine': first_line
+            })
+            print(f"  - Firestore atualizado para a música ID: {song_id}")
         else:
-            print("  - Letra normal já existe. Pulando busca.")
-
-        # --- NOVO BLOCO para Letras Sincronizadas ---
-        if 'syncedLyrics' not in song_data or not song_data['syncedLyrics']:
-            print("  - Procurando letra sincronizada (LRC)...")
-            synced_lyrics = get_synced_lyrics_from_lrclib(artist, title)
-
-            if synced_lyrics:
-                print("  - Letra sincronizada (LRC) encontrada!")
-                songs_ref.document(song_id).update({
-                    'syncedLyrics': synced_lyrics
-                })
-                print(f"  - Firestore atualizado (LRC) para ID: {song_id}")
-            else:
-                print("  - Letra sincronizada (LRC) não encontrada na API.")
-        else:
-            print("  - Letra sincronizada (LRC) já existe. Pulando busca.")
-
+            print("  - Letra não encontrada na API.")
+    
     print("\n--- Processo concluído! ---")
 
 if __name__ == '__main__':
