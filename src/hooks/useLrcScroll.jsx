@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatMsToTimer, parseLRC, parseLrcMapping } from '../utils/lrcParser';
 
+const PRE_ROLL_MS = 5000;
+
 export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) => {
   const parsedLrc = useMemo(() => parseLRC(lrcText), [lrcText]);
   const parsedMapping = useMemo(() => parseLrcMapping(lrcMapping), [lrcMapping]);
+
+  const initialOffsetMs = useMemo(() => {
+    if (!parsedMapping.length) return 0;
+    return Math.max(0, parsedMapping[0].timeMs - PRE_ROLL_MS);
+  }, [parsedMapping]);
 
   const [isEnabled, setIsEnabled] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -22,6 +29,17 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
       animationRef.current = null;
     }
   }, []);
+
+  // Sincroniza o offset inicial sempre que o mapping mudar e o player não estiver rodando
+  useEffect(() => {
+    if (!isRunning) {
+      elapsedBeforeStartRef.current = initialOffsetMs;
+      setElapsedMs(initialOffsetMs);
+      lastAppliedIndexRef.current = -1;
+      setActiveLineIndex(-1);
+      setLastAppliedMappingIndex(-1);
+    }
+  }, [initialOffsetMs, isRunning]);
 
   const applyMappingByElapsedTime = useCallback((timeInMs) => {
     if (!parsedMapping.length || !resolveTargetByMapping) return;
@@ -66,17 +84,14 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
 
   const play = useCallback(() => {
     if (!isEnabled || isRunning) return;
-
     startTimeRef.current = performance.now() - elapsedBeforeStartRef.current;
     setIsRunning(true);
   }, [isEnabled, isRunning]);
 
   const pause = useCallback(() => {
     if (!isRunning) return;
-
     setIsRunning(false);
     stopAnimation();
-
     if (startTimeRef.current !== null) {
       elapsedBeforeStartRef.current = performance.now() - startTimeRef.current;
       setElapsedMs(elapsedBeforeStartRef.current);
@@ -86,15 +101,13 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
   const reset = useCallback(() => {
     setIsRunning(false);
     stopAnimation();
-
     startTimeRef.current = null;
-    elapsedBeforeStartRef.current = 0;
+    elapsedBeforeStartRef.current = initialOffsetMs;
     lastAppliedIndexRef.current = -1;
-
-    setElapsedMs(0);
+    setElapsedMs(initialOffsetMs);
     setActiveLineIndex(-1);
     setLastAppliedMappingIndex(-1);
-  }, [stopAnimation]);
+  }, [stopAnimation, initialOffsetMs]);
 
   const enable = useCallback(() => {
     setIsEnabled(true);
@@ -113,7 +126,6 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
       if (startTimeRef.current === null) {
         startTimeRef.current = now - elapsedBeforeStartRef.current;
       }
-
       const nextElapsed = now - startTimeRef.current;
       setElapsedMs(nextElapsed);
       applyMappingByElapsedTime(nextElapsed);
@@ -121,7 +133,6 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
     };
 
     animationRef.current = requestAnimationFrame(step);
-
     return () => stopAnimation();
   }, [isRunning, isEnabled, applyMappingByElapsedTime, stopAnimation]);
 
