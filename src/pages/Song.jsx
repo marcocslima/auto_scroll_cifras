@@ -309,7 +309,9 @@ const Song = () => {
   const handleRestartLrc = () => {
     if (isScrollEnabled) stop();
     if (!isLrcMode) return;
+  
     restartLrc();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
   const handleGoBack = () => {

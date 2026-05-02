@@ -154,10 +154,12 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
     setActiveLineIndex(-1);
     setLastAppliedMappingIndex(-1);
   
+    applyMappingByElapsedTime(initialOffsetMs);
+  
     if (!isRunning) {
       setIsRunning(true);
     }
-  }, [isEnabled, isRunning, initialOffsetMs]);
+  }, [isEnabled, isRunning, initialOffsetMs, applyMappingByElapsedTime]);
 
   return {
     isEnabled,
