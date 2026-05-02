@@ -251,6 +251,7 @@ const Song = () => {
     play: playLrc,
     pause: pauseLrc,
     reset: resetLrc,
+    restart: restartLrc,
   } = useLrcScroll({
     lrcText: song?.syncedLyrics || '',
     lrcMapping: song?.lrcMapping || null,
@@ -296,24 +297,28 @@ const Song = () => {
 
   const handleToggleLrcMode = () => {
     if (isScrollEnabled) stop();
-
+  
     if (isLrcMode) {
       disableLrcMode();
       return;
     }
-
+  
     enableLrcMode();
   };
-
+  
+  const handleRestartLrc = () => {
+    if (isScrollEnabled) stop();
+    if (!isLrcMode) return;
+    restartLrc();
+  };
+  
   const handleGoBack = () => {
     stop();
     disableLrcMode();
-
     if (song?.artist) {
       navigate(`/?artist=${encodeURIComponent(song.artist)}`);
       return;
     }
-
     navigate('/');
   };
 
@@ -434,16 +439,30 @@ const Song = () => {
           ))}
       </div>
 
-      <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
-        {song.syncedLyrics && (
+    <div className="fixed bottom-6 right-6 flex flex-col items-center space-y-4 z-50">
+      {song.syncedLyrics && (
+        <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3">
           <button
             onClick={handleToggleLrcMode}
-            title="Ativar/Desativar modo LRC"
-            className={`text-white font-bold p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 ${isLrcMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'}`}
+            className={`font-bold text-white rounded-full shadow-lg px-5 py-4 transition-all duration-200 ${
+              isLrcMode
+                ? 'bg-red-600 hover:bg-red-500'
+                : 'bg-green-600 hover:bg-green-500'
+            }`}
           >
-            <span className="text-sm">LRC</span>
+            {isLrcMode ? 'Desligar LRC' : 'LRC'}
           </button>
-        )}
+
+          {isLrcMode && isLrcRunning && (
+            <button
+              onClick={handleRestartLrc}
+              className="bg-amber-500 hover:bg-amber-400 text-gray-900 font-bold rounded-full shadow-lg px-5 py-4 transition-all duration-200"
+            >
+              Reiniciar LRC
+            </button>
+          )}
+        </div>
+      )}
 
         <button
           onClick={handleToggleFaceScroll}

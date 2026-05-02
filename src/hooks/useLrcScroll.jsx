@@ -143,6 +143,22 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
 
   useEffect(() => () => stopAnimation(), [stopAnimation]);
 
+  const restart = useCallback(() => {
+    if (!isEnabled) return;
+  
+    elapsedBeforeStartRef.current = initialOffsetMs;
+    startTimeRef.current = performance.now() - initialOffsetMs;
+    lastAppliedIndexRef.current = -1;
+  
+    setElapsedMs(initialOffsetMs);
+    setActiveLineIndex(-1);
+    setLastAppliedMappingIndex(-1);
+  
+    if (!isRunning) {
+      setIsRunning(true);
+    }
+  }, [isEnabled, isRunning, initialOffsetMs]);
+
   return {
     isEnabled,
     isRunning,
@@ -157,5 +173,6 @@ export const useLrcScroll = ({ lrcText, lrcMapping, resolveTargetByMapping }) =>
     play,
     pause,
     reset,
+    restart,
   };
 };
